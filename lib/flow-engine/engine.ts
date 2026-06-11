@@ -19,6 +19,7 @@ import type {
 } from "./types";
 import { executeAiResponse } from "./nodes/ai-response";
 import { adaptMessage } from "./platform-adapter";
+import { safeFetch } from "./safe-fetch";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
 
@@ -607,7 +608,9 @@ async function executeHttpRequest(
       ? interpolateVariables(data.body, context.variables || {})
       : undefined;
 
-    const response = await fetch(url, {
+    // Flow URLs are user-authored and can interpolate contact-controlled
+    // variables — SSRF-guarded fetch only.
+    const response = await safeFetch(url, {
       method: data.method,
       headers: {
         "Content-Type": "application/json",
@@ -616,18 +619,16 @@ async function executeHttpRequest(
       body: data.method !== "GET" ? body : undefined,
     });
 
-    const responseData = await response.text();
-
     // Store response in variable if configured
     if (data.responseVariable && context.variables) {
       try {
-        context.variables[data.responseVariable] = JSON.parse(responseData);
+        context.variables[data.responseVariable] = JSON.parse(response.bodyText);
       } catch {
-        context.variables[data.responseVariable] = responseData;
+        context.variables[data.responseVariable] = response.bodyText;
       }
     }
   } catch (error) {
-    console.error("HTTP request failed:", error);
+    console.error("HTTP request failed:", error instanceof Error ? error.message : error);
   }
 }
 
