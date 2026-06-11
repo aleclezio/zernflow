@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Loader2 } from "lucide-react";
+import { withBasePath } from "@/lib/client-url";
 
 export function CreateFlowButton() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export function CreateFlowButton() {
     setCreating(true);
 
     try {
-      const res = await fetch("/api/v1/flows", {
+      const res = await fetch(withBasePath("/api/v1/flows"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "Untitled Flow" }),

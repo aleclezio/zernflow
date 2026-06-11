@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/client-url";
 import { createClient } from "@/lib/supabase/client";
 import { PlatformIcon } from "@/components/platform-icon";
 import type { Database, Platform } from "@/lib/types/database";
@@ -96,7 +97,7 @@ export function ChannelsView({
   async function handleConnect(platform: Platform) {
     setConnecting(platform);
     try {
-      const res = await fetch("/api/v1/channels/connect", {
+      const res = await fetch(withBasePath("/api/v1/channels/connect"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ platform }),
@@ -126,7 +127,7 @@ export function ChannelsView({
     setSyncMessage(null);
 
     try {
-      const res = await fetch("/api/v1/channels/sync", { method: "POST" });
+      const res = await fetch(withBasePath("/api/v1/channels/sync"), { method: "POST" });
       const data = await res.json();
 
       if (!res.ok || data.error) {

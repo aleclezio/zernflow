@@ -19,6 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
+import { withBasePath } from "@/lib/client-url";
 import { updateWorkspaceSettings } from "@/lib/actions/workspace";
 
 interface WorkspaceSettings {
@@ -86,7 +87,7 @@ export function SettingsView({
     setTestResult(null);
 
     try {
-      const res = await fetch("/api/v1/channels/test-key", {
+      const res = await fetch(withBasePath("/api/v1/channels/test-key"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

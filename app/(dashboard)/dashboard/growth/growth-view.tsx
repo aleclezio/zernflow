@@ -13,6 +13,7 @@ import {
   Send,
   Eye,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { Database, Json, Platform } from "@/lib/types/database";
@@ -543,12 +544,12 @@ export function GrowthView({
               Publish at least one flow to use as the DM response when comments
               match your keywords.
             </p>
-            <a
+            <Link
               href="/dashboard/flows"
               className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
               Go to Flows
-            </a>
+            </Link>
           </div>
         )}
 
