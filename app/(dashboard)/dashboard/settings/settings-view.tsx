@@ -35,6 +35,7 @@ interface TestResult {
   error?: string;
   profileName?: string | null;
   warning?: string;
+  webhookWarning?: string;
 }
 
 interface ProfileChoice {
@@ -118,6 +119,7 @@ export function SettingsView({
         accountCount: accounts.length,
         profileName: data.profile?.name ?? null,
         warning: data.warning,
+        webhookWarning: data.webhookWarning,
       });
       setProfileChoices(null);
       setChosenProfileId("");
@@ -299,6 +301,12 @@ export function SettingsView({
             {testResult?.warning && (
               <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 {testResult.warning}
+              </p>
+            )}
+
+            {testResult?.webhookWarning && (
+              <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {testResult.webhookWarning}
               </p>
             )}
 

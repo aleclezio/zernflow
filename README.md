@@ -198,9 +198,11 @@ multi-client foundation. To onboard a client:
   unsigned or mis-signed deliveries are rejected before any parsing.
 - Replays are deduped by event id (`webhook_events`, insert-before-process,
   7-day retention).
-- Registration happens automatically on key save. If the scoped key is not
-  allowed to manage webhooks, run the operator fallback (the admin key never
-  enters the app database):
+- Registration is attempted automatically on key save, but **profile-scoped
+  keys cannot manage webhooks** (verified live 2026-06-11: the API refuses
+  with "A profile-scoped API key cannot manage webhooks"). Onboarding a
+  workspace therefore includes one operator step — register the webhook with
+  an authorized key (it never enters the app database):
 
 ```bash
 ZERNIO_ADMIN_KEY=... node scripts/register-webhook.mjs <workspace-id> https://your-public-url
