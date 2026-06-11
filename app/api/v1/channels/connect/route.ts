@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createZernioClient } from "@/lib/zernio-client";
+import { getZernioKey } from "@/lib/workspace-keys";
 
 async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -32,7 +33,8 @@ export async function POST(request: NextRequest) {
   if (!workspace)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!workspace.late_api_key_encrypted) {
+  const apiKey = await getZernioKey(supabase, workspace.id);
+  if (!apiKey) {
     return NextResponse.json(
       { error: "Zernio API key not configured. Go to Settings first." },
       { status: 400 }
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const zernio = createZernioClient(workspace.late_api_key_encrypted);
+  const zernio = createZernioClient(apiKey);
 
   try {
     // Get profile ID (required by Zernio's connect endpoint)

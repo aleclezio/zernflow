@@ -23,6 +23,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run test:unit
+      - name: Guard — key columns only via lib/workspace-keys.ts
+        run: bash scripts/check-key-access.sh
 
   integration:
     name: Integration tests (local Supabase)
