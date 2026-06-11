@@ -9,6 +9,8 @@ import { requireCronAuth } from "@/lib/cron-auth";
  */
 export async function GET(request: NextRequest) {
   if (!requireCronAuth(request)) {
+    const { logSecurityEvent } = await import("@/lib/security-events");
+    await logSecurityEvent("cron_auth_failed", null, { route: "sequences" });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

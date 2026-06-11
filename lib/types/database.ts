@@ -843,6 +843,24 @@ export interface Database {
         };
         Relationships: [];
       };
+      security_events: {
+        Row: {
+          id: string;
+          workspace_id: string | null;
+          event_type: string;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id?: string | null;
+          event_type: string;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: string;

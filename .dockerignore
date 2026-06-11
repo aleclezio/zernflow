@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.env
+.env.*
+supabase/.branches
+supabase/.temp
+tests
+*.log
+Dockerfile
+.dockerignore
+.github

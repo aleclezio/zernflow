@@ -5,6 +5,7 @@ import { setZernioKey } from "@/lib/workspace-keys";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { accountProfileId } from "@/lib/zernio-scope";
 import { registerWorkspaceWebhook } from "@/lib/webhook-registration";
+import { logSecurityEvent } from "@/lib/security-events";
 
 /**
  * POST /api/v1/channels/test-key
@@ -51,13 +52,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Owner-only: members must not be able to swap the workspace key.
-  const { data: membership } = await supabase
+  // A transient lookup error must NOT read as "not a member" — fail 503.
+  const { data: membership, error: membershipErr } = await supabase
     .from("workspace_members")
     .select("role")
     .eq("workspace_id", workspaceId)
     .eq("user_id", user.id)
     .maybeSingle();
 
+  if (membershipErr) {
+    return NextResponse.json({ error: "Temporary error, retry" }, { status: 503 });
+  }
   if (!membership || membership.role !== "owner") {
     return NextResponse.json(
       { error: "Only the workspace owner can manage API keys" },
@@ -80,6 +85,7 @@ export async function POST(request: NextRequest) {
     const res = await zernio.profiles.listProfiles();
     profiles = res.data?.profiles ?? [];
   } catch {
+    await logSecurityEvent("test_key_rejected", workspaceId, { reason: "sdk_error" });
     return NextResponse.json(
       { error: "Invalid API key or connection error" },
       { status: 400 }
@@ -196,6 +202,8 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  await logSecurityEvent("key_saved", workspaceId, { profileId });
 
   // Register/refresh the per-workspace webhook. Non-fatal: scoped keys may
   // not manage webhooks (operator fallback: scripts/register-webhook.mjs).

@@ -5,6 +5,7 @@ import { matchTrigger } from "@/lib/flow-engine/trigger-matcher";
 import { findWorkspaceByWebhookToken } from "@/lib/workspace-keys";
 import { pickSignatureHeader, resolveEventId, sha256Hex, verifySignature } from "@/lib/webhook-verify";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { logSecurityEvent } from "@/lib/security-events";
 
 /**
  * POST /api/webhooks/zernio/[token]
@@ -91,6 +92,9 @@ export async function POST(
   const rawBody = await request.text();
   const signature = pickSignatureHeader(request.headers);
   if (!ws.webhookSecret || !signature || !verifySignature(rawBody, signature, ws.webhookSecret)) {
+    await logSecurityEvent("webhook_sig_rejected", ws.workspaceId, {
+      reason: !ws.webhookSecret ? "no_secret" : !signature ? "no_signature" : "bad_signature",
+    });
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
@@ -124,6 +128,7 @@ export async function POST(
     .maybeSingle();
 
   if (!dedupeRow) {
+    await logSecurityEvent("webhook_replay", ws.workspaceId, { eventId });
     return NextResponse.json({ ok: true, duplicate: true });
   }
 

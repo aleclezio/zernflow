@@ -11,6 +11,8 @@ import type { Json } from "@/lib/types/database";
  */
 export async function GET(request: NextRequest) {
   if (!requireCronAuth(request)) {
+    const { logSecurityEvent } = await import("@/lib/security-events");
+    await logSecurityEvent("cron_auth_failed", null, { route: "jobs" });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
