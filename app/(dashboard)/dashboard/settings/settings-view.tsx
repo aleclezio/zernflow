@@ -33,6 +33,13 @@ interface TestResult {
   success: boolean;
   accountCount?: number;
   error?: string;
+  profileName?: string | null;
+  warning?: string;
+}
+
+interface ProfileChoice {
+  id: string;
+  name: string | null;
 }
 
 export function SettingsView({
@@ -52,6 +59,8 @@ export function SettingsView({
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [profileChoices, setProfileChoices] = useState<ProfileChoice[] | null>(null);
+  const [chosenProfileId, setChosenProfileId] = useState<string>("");
 
   function addKeyword() {
     const trimmed = newKeyword.trim().toLowerCase();
@@ -79,10 +88,21 @@ export function SettingsView({
       const res = await fetch("/api/v1/channels/test-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: keyToTest, workspaceId: workspace.id }),
+        body: JSON.stringify({
+          apiKey: keyToTest,
+          workspaceId: workspace.id,
+          profileId: chosenProfileId || undefined,
+        }),
       });
 
       const data = await res.json();
+
+      if (res.status === 422 && data.code === "PROFILE_CHOICE_REQUIRED") {
+        // Key sees several Zernio profiles — never guess; the user picks one.
+        setProfileChoices(data.profiles || []);
+        setTestResult({ success: false, error: data.error });
+        return;
+      }
 
       if (!res.ok || data.error) {
         setTestResult({
@@ -96,7 +116,11 @@ export function SettingsView({
       setTestResult({
         success: true,
         accountCount: accounts.length,
+        profileName: data.profile?.name ?? null,
+        warning: data.warning,
       });
+      setProfileChoices(null);
+      setChosenProfileId("");
 
       // Key was saved and channels synced server-side
       setApiKey("");
@@ -257,7 +281,9 @@ export function SettingsView({
               {testResult && testResult.success && (
                 <span className="flex items-center gap-1 text-xs text-green-600">
                   <Check className="h-3.5 w-3.5" />
-                  Connected ({testResult.accountCount}{" "}
+                  Connected
+                  {testResult.profileName ? ` to "${testResult.profileName}"` : ""} (
+                  {testResult.accountCount}{" "}
                   {testResult.accountCount === 1 ? "account" : "accounts"}{" "}
                   found)
                 </span>
@@ -269,6 +295,41 @@ export function SettingsView({
                 </span>
               )}
             </div>
+
+            {testResult?.warning && (
+              <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {testResult.warning}
+              </p>
+            )}
+
+            {profileChoices && profileChoices.length > 0 && (
+              <div className="mt-3 rounded-lg border border-border bg-muted/40 p-3">
+                <p className="text-xs font-medium">
+                  Choose the Zernio profile to bind to this workspace:
+                </p>
+                <div className="mt-2 space-y-1.5">
+                  {profileChoices.map((p) => (
+                    <label key={p.id} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="radio"
+                        name="zernio-profile"
+                        value={p.id}
+                        checked={chosenProfileId === p.id}
+                        onChange={() => setChosenProfileId(p.id)}
+                      />
+                      {p.name || p.id}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  onClick={handleTestConnection}
+                  disabled={!chosenProfileId || testing}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Bind selected profile
+                </button>
+              </div>
+            )}
 
             {workspace.hasApiKey && !testResult && (
               <p className="mt-1.5 flex items-center gap-1 text-xs text-green-600">

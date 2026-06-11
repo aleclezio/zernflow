@@ -33,18 +33,34 @@ function makeRequest(body: unknown): NextRequest {
   });
 }
 
+// Per-test unique ids: profile<->workspace binding and active accounts are
+// globally unique (00011), so fixtures must not collide across tests.
+let testProfileId = "";
+let testAccountId = "";
+
 beforeEach(() => {
   currentClient = null;
   _resetRateLimits();
+  testProfileId = `prof-${crypto.randomUUID()}`;
+  testAccountId = `acc-${crypto.randomUUID()}`;
+  listProfiles.mockReset();
+  listProfiles.mockResolvedValue({
+    data: { profiles: [{ _id: testProfileId, name: "Default" }] },
+  });
   listAccounts.mockReset();
   listAccounts.mockResolvedValue({
     data: {
       accounts: [
-        { _id: "acc-1", platform: "instagram", username: "test_ig", displayName: "Test IG" },
+        {
+          _id: testAccountId,
+          platform: "instagram",
+          username: "test_ig",
+          displayName: "Test IG",
+          profileId: testProfileId,
+        },
       ],
     },
   });
-  listProfiles.mockReset();
 });
 
 describe("POST /api/v1/channels/test-key", () => {
@@ -117,7 +133,7 @@ describe("POST /api/v1/channels/test-key", () => {
       .select("late_account_id, workspace_id")
       .eq("workspace_id", owner.workspaceId);
     expect(channels).toHaveLength(1);
-    expect(channels?.[0].late_account_id).toBe("acc-1");
+    expect(channels?.[0].late_account_id).toBe(testAccountId);
   });
 
   it("returns a generic 400 on SDK failure without echoing SDK error detail", async () => {

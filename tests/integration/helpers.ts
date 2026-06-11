@@ -38,17 +38,32 @@ export async function createTestUser(label: string) {
     throw new Error(`createTestUser failed: ${createErr?.message}`);
   }
 
-  const client = anonClient();
-  const { error: signInErr } = await client.auth.signInWithPassword({ email, password });
-  if (signInErr) throw new Error(`sign-in failed: ${signInErr.message}`);
+  // Docker Desktop's container clock can drift behind the host after sleep,
+  // making fresh JWTs look issued-in-the-future. Retry transient auth skew.
+  let client = anonClient();
+  let membership: { workspace_id: string; role: string } | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    client = anonClient();
+    const { error: signInErr } = await client.auth.signInWithPassword({ email, password });
+    if (signInErr) throw new Error(`sign-in failed: ${signInErr.message}`);
 
-  const { data: membership, error: memErr } = await client
-    .from("workspace_members")
-    .select("workspace_id, role")
-    .eq("user_id", created.user.id)
-    .single();
-  if (memErr || !membership) {
-    throw new Error(`workspace lookup failed: ${memErr?.message}`);
+    const { data, error: memErr } = await client
+      .from("workspace_members")
+      .select("workspace_id, role")
+      .eq("user_id", created.user.id)
+      .single();
+
+    if (data) {
+      membership = data;
+      break;
+    }
+    if (!memErr?.message?.includes("future")) {
+      throw new Error(`workspace lookup failed: ${memErr?.message}`);
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  if (!membership) {
+    throw new Error("workspace lookup failed: clock skew persisted after retries");
   }
 
   return {

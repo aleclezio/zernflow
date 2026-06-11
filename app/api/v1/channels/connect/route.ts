@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
+import {
+  getBoundProfileId,
+  ProfileUnboundError,
+  profileUnboundResponse,
+} from "@/lib/zernio-scope";
 
 async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -53,18 +58,17 @@ export async function POST(request: NextRequest) {
 
   const zernio = createZernioClient(apiKey);
 
+  // Connect is always scoped to the workspace's bound profile — never a
+  // "first profile of the key" fallback.
+  let profileId: string;
   try {
-    // Get profile ID (required by Zernio's connect endpoint)
-    const profilesRes = await zernio.profiles.listProfiles();
-    const profiles = profilesRes.data?.profiles ?? [];
-    if (profiles.length === 0) {
-      return NextResponse.json(
-        { error: "No Zernio profiles found. Create one in your Zernio dashboard first." },
-        { status: 400 }
-      );
-    }
+    profileId = await getBoundProfileId(supabase, workspace.id);
+  } catch (err) {
+    if (err instanceof ProfileUnboundError) return profileUnboundResponse();
+    throw err;
+  }
 
-    const profileId = profiles[0]._id!;
+  try {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const callbackUrl = `${appUrl}/dashboard/channels/callback`;
 

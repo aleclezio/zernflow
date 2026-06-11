@@ -80,6 +80,8 @@ export interface Database {
           late_api_key_encrypted: string | null;
           ai_api_key: string | null;
           ai_provider: string;
+          zernio_profile_id: string | null;
+          zernio_profile_name: string | null;
           global_keywords: Json | null;
           created_at: string;
           updated_at: string;
@@ -91,6 +93,8 @@ export interface Database {
           late_api_key_encrypted?: string | null;
           ai_api_key?: string | null;
           ai_provider?: string;
+          zernio_profile_id?: string | null;
+          zernio_profile_name?: string | null;
           global_keywords?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -102,6 +106,8 @@ export interface Database {
           late_api_key_encrypted?: string | null;
           ai_api_key?: string | null;
           ai_provider?: string;
+          zernio_profile_id?: string | null;
+          zernio_profile_name?: string | null;
           global_keywords?: Json | null;
           updated_at?: string;
         };
