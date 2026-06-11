@@ -4,6 +4,7 @@ import { createZernioClient } from "@/lib/zernio-client";
 import { setZernioKey } from "@/lib/workspace-keys";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { accountProfileId } from "@/lib/zernio-scope";
+import { registerWorkspaceWebhook } from "@/lib/webhook-registration";
 
 /**
  * POST /api/v1/channels/test-key
@@ -196,6 +197,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Register/refresh the per-workspace webhook. Non-fatal: scoped keys may
+  // not manage webhooks (operator fallback: scripts/register-webhook.mjs).
+  const registration = await registerWorkspaceWebhook(supabase, workspaceId, apiKey.trim());
+
   // Auto-sync the bound profile's channels.
   const { data: existingChannels } = await supabase
     .from("channels")
@@ -225,5 +230,6 @@ export async function POST(request: NextRequest) {
     accounts: scoped,
     profile: { id: profileId, name: targetProfile.name ?? null },
     ...(warning ? { warning } : {}),
+    ...(registration.ok ? {} : { webhookWarning: registration.warning }),
   });
 }

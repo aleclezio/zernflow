@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-violations=$(grep -rn --include='*.ts' --include='*.tsx' -E 'late_api_key_encrypted|ai_api_key' app components lib \
+violations=$(grep -rn --include='*.ts' --include='*.tsx' -E 'late_api_key_encrypted|ai_api_key|webhook_secret_encrypted' app components lib \
   | grep -v '^lib/workspace-keys.ts:' \
   | grep -v '^lib/types/database.ts:' || true)
 

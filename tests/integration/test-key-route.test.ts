@@ -16,10 +16,13 @@ vi.mock("@/lib/supabase/server", () => ({
 // No real Zernio traffic in integration tests.
 const listAccounts = vi.fn();
 const listProfiles = vi.fn();
+const createWebhookSettings = vi.fn();
+const deleteWebhookSettings = vi.fn();
 vi.mock("@/lib/zernio-client", () => ({
   createZernioClient: () => ({
     accounts: { listAccounts },
     profiles: { listProfiles },
+    webhooks: { createWebhookSettings, deleteWebhookSettings },
   }),
 }));
 
@@ -61,6 +64,12 @@ beforeEach(() => {
       ],
     },
   });
+  createWebhookSettings.mockReset();
+  createWebhookSettings.mockResolvedValue({
+    data: { success: true, webhook: { _id: `wh-${crypto.randomUUID()}` } },
+  });
+  deleteWebhookSettings.mockReset();
+  deleteWebhookSettings.mockResolvedValue({ data: { success: true } });
 });
 
 describe("POST /api/v1/channels/test-key", () => {
@@ -148,6 +157,59 @@ describe("POST /api/v1/channels/test-key", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(JSON.stringify(body)).not.toContain("zern-secret-echo");
+  });
+
+  it("registers a per-workspace webhook on key save (token hashed, secret encrypted)", async () => {
+    const owner = await createTestUser("tk-webhook");
+    currentClient = owner.client;
+
+    const res = await POST(
+      makeRequest({ apiKey: "k-webhook", workspaceId: owner.workspaceId })
+    );
+    expect(res.status).toBe(200);
+
+    expect(createWebhookSettings).toHaveBeenCalledTimes(1);
+    const body = createWebhookSettings.mock.calls[0][0].body;
+    expect(body.url).toContain("/api/webhooks/zernio/");
+    expect(body.secret).toBeTruthy();
+    expect(body.events).toEqual(["message.received"]);
+
+    const { data: ws } = await serviceClient()
+      .from("workspaces")
+      .select("webhook_token_hash, webhook_secret_encrypted, zernio_webhook_id")
+      .eq("id", owner.workspaceId)
+      .single();
+    expect(ws?.webhook_token_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(isEncrypted(ws?.webhook_secret_encrypted)).toBe(true);
+    expect(ws?.zernio_webhook_id).toBeTruthy();
+
+    // The stored token hash must match the registered URL's token.
+    const token = body.url.split("/api/webhooks/zernio/")[1];
+    const { createHash } = await import("node:crypto");
+    expect(ws?.webhook_token_hash).toBe(createHash("sha256").update(token).digest("hex"));
+  });
+
+  it("still saves the key (200 + warning) when webhook registration fails", async () => {
+    const owner = await createTestUser("tk-webhook-fail");
+    currentClient = owner.client;
+    createWebhookSettings.mockRejectedValue(new Error("403 scoped key cannot manage webhooks"));
+
+    const res = await POST(
+      makeRequest({ apiKey: "k-webhook-fail", workspaceId: owner.workspaceId })
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.webhookWarning).toBeTruthy();
+    expect(JSON.stringify(body)).not.toContain("scoped key cannot manage"); // no SDK echo
+
+    const { data: ws } = await serviceClient()
+      .from("workspaces")
+      .select("late_api_key_encrypted, zernio_webhook_id")
+      .eq("id", owner.workspaceId)
+      .single();
+    expect(isEncrypted(ws?.late_api_key_encrypted)).toBe(true); // key still saved
+    expect(ws?.zernio_webhook_id).toBeNull();
   });
 
   it("rate limits after 5 attempts per minute with 429", async () => {

@@ -1,351 +1,267 @@
 #!/usr/bin/env node
 /**
- * ZernFlow End-to-End Smoke Test
+ * ZernFlow end-to-end smoke test (hardened webhook contract).
  *
- * This script:
- * 1. Creates a simple test flow (trigger -> send message)
- * 2. Creates a keyword trigger for "test"
- * 3. Sends a simulated Zernio webhook to the deployed app
- * 4. Verifies: contact created, conversation created, message stored, flow session ran
- * 5. Cleans up test data
+ * Against a RUNNING app (next dev or deployed):
+ *   1. Mints a webhook token+secret for the target workspace (restored after)
+ *   2. Creates a test channel + published keyword flow
+ *   3. Sends an UNSIGNED webhook  -> expects 401, no writes
+ *   4. Sends a SIGNED webhook     -> expects 200; contact + conversation +
+ *      flow session created
+ *   5. REPLAYS the same event     -> expects 200 {duplicate:true}, no dupes
+ *   6. Cleans up all test data and restores the previous webhook credentials
  *
  * Usage:
- *   node scripts/smoke-test.mjs [base-url]
- *   node scripts/smoke-test.mjs https://zernflow.vercel.app
+ *   node scripts/smoke-test.mjs [base-url] [workspace-id]
  *   node scripts/smoke-test.mjs http://localhost:3000
  */
-
 import { createClient } from "@supabase/supabase-js";
-import { randomUUID } from "crypto";
-import { readFileSync } from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { createCipheriv, createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-// Load .env manually (no dotenv dependency)
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(__dirname, "../.env");
-for (const line of readFileSync(envPath, "utf8").split("\n")) {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith("#")) continue;
-  const eq = trimmed.indexOf("=");
-  if (eq === -1) continue;
-  const key = trimmed.slice(0, eq);
-  const val = trimmed.slice(eq + 1);
-  if (!process.env[key]) process.env[key] = val;
+for (const file of [".env.local", ".env"]) {
+  const p = resolve(__dirname, "..", file);
+  if (!existsSync(p)) continue;
+  for (const line of readFileSync(p, "utf8").split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const eq = t.indexOf("=");
+    if (eq === -1) continue;
+    const k = t.slice(0, eq);
+    if (!process.env[k]) process.env[k] = t.slice(eq + 1);
+  }
 }
 
-const BASE_URL = process.argv[2] || "https://zernflow.vercel.app";
-const WORKSPACE_ID = "1ed7f49a-79d9-42e5-a79d-0ea9e3b957b1";
+const BASE_URL = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
+let workspaceId = process.argv[3];
 
-// Use the telegram channel (simplest for testing)
-const CHANNEL = {
-  id: "0231f9d7-e6d2-45e4-931b-48543d492c9d",
-  platform: "telegram",
-  late_account_id: "69709fcdc955c6705a96ed84",
-};
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-// Test IDs for cleanup
-const testFlowId = randomUUID();
-const testTriggerId = randomUUID();
-const fakeSenderId = `smoke_test_${Date.now()}`;
-const fakeConversationId = `conv_smoke_${Date.now()}`;
-
-const log = (emoji, msg) => console.log(`${emoji}  ${msg}`);
-const pass = (msg) => log("\x1b[32mPASS\x1b[0m", msg);
-const fail = (msg) => log("\x1b[31mFAIL\x1b[0m", msg);
-const info = (msg) => log("\x1b[36mINFO\x1b[0m", msg);
-
-async function setup() {
-  info("Setting up test flow and trigger...");
-
-  // Create a simple flow: trigger -> sendMessage
-  const flowNodes = [
-    {
-      id: "trigger-1",
-      type: "trigger",
-      position: { x: 250, y: 0 },
-      data: {
-        label: "Smoke Test Trigger",
-        triggerType: "keyword",
-        config: { keywords: ["smoketest"] },
-      },
-    },
-    {
-      id: "msg-1",
-      type: "sendMessage",
-      position: { x: 250, y: 150 },
-      data: {
-        label: "Smoke Test Reply",
-        messages: [{ text: "Smoke test passed! ZernFlow is working." }],
-      },
-    },
-  ];
-
-  const flowEdges = [
-    { id: "e1", source: "trigger-1", target: "msg-1" },
-  ];
-
-  const { error: flowErr } = await supabase.from("flows").insert({
-    id: testFlowId,
-    workspace_id: WORKSPACE_ID,
-    name: "[SMOKE TEST] Auto-Reply Flow",
-    status: "published",
-    nodes: flowNodes,
-    edges: flowEdges,
-    published_at: new Date().toISOString(),
-  });
-
-  if (flowErr) throw new Error(`Failed to create flow: ${flowErr.message}`);
-  pass("Created test flow (published)");
-
-  // Create a keyword trigger
-  const { error: triggerErr } = await supabase.from("triggers").insert({
-    id: testTriggerId,
-    flow_id: testFlowId,
-    channel_id: null, // Global trigger (matches any channel)
-    type: "keyword",
-    config: {
-      keywords: [{ value: "smoketest", matchType: "contains" }],
-    },
-    is_active: true,
-    priority: 100,
-  });
-
-  if (triggerErr) throw new Error(`Failed to create trigger: ${triggerErr.message}`);
-  pass("Created keyword trigger for 'smoketest'");
-}
-
-async function fireWebhook() {
-  info(`Sending simulated webhook to ${BASE_URL}/api/webhooks/late ...`);
-
-  const payload = {
-    event: "message.received",
-    message: {
-      id: `msg_${Date.now()}`,
-      conversationId: fakeConversationId,
-      platform: "telegram",
-      platformMessageId: `tg_${Date.now()}`,
-      direction: "inbound",
-      text: "hey smoketest please",
-      attachments: [],
-      sender: {
-        id: fakeSenderId,
-        name: "Smoke Test User",
-        username: "smoke_tester",
-        picture: null,
-      },
-      sentAt: new Date().toISOString(),
-      isRead: false,
-    },
-    conversation: {
-      id: fakeConversationId,
-      platformConversationId: `tg_conv_${Date.now()}`,
-      participantId: fakeSenderId,
-      participantName: "Smoke Test User",
-      participantUsername: "smoke_tester",
-      participantPicture: null,
-      status: "open",
-    },
-    account: {
-      id: CHANNEL.late_account_id,
-      platform: "telegram",
-      username: "test_bot",
-      displayName: "Test Bot",
-    },
-    metadata: {},
-    timestamp: new Date().toISOString(),
-  };
-
-  const res = await fetch(`${BASE_URL}/api/webhooks/late`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  const body = await res.json();
-
-  if (!res.ok) {
-    fail(`Webhook returned ${res.status}: ${JSON.stringify(body)}`);
-    return false;
-  }
-
-  pass(`Webhook returned ${res.status}: ${JSON.stringify(body)}`);
-  return true;
-}
-
-async function verify() {
-  info("Verifying results (waiting 2s for async flow execution)...");
-  await new Promise((r) => setTimeout(r, 2000));
-
-  let allPassed = true;
-
-  // 1. Check contact was created
-  const { data: contactChannel } = await supabase
-    .from("contact_channels")
-    .select("contact_id, contacts(id, display_name)")
-    .eq("channel_id", CHANNEL.id)
-    .eq("platform_sender_id", fakeSenderId)
-    .single();
-
-  if (contactChannel?.contact_id) {
-    pass(`Contact created: ${contactChannel.contacts?.display_name} (${contactChannel.contact_id})`);
-  } else {
-    fail("Contact was NOT created");
-    allPassed = false;
-  }
-
-  // 2. Check conversation was created
-  const { data: conversation } = await supabase
-    .from("conversations")
-    .select("id, late_conversation_id, status, last_message_preview")
-    .eq("channel_id", CHANNEL.id)
-    .eq("contact_id", contactChannel?.contact_id || "none")
-    .single();
-
-  if (conversation) {
-    pass(`Conversation created: ${conversation.id} (preview: "${conversation.last_message_preview}")`);
-  } else {
-    fail("Conversation was NOT created");
-    allPassed = false;
-  }
-
-  // 3. Check inbound message was stored
-  const { data: messages } = await supabase
-    .from("messages")
-    .select("id, direction, text, status")
-    .eq("conversation_id", conversation?.id || "none")
-    .order("created_at", { ascending: true });
-
-  const inbound = messages?.find((m) => m.direction === "inbound");
-  const outbound = messages?.find((m) => m.direction === "outbound");
-
-  if (inbound) {
-    pass(`Inbound message stored: "${inbound.text}"`);
-  } else {
-    fail("Inbound message was NOT stored");
-    allPassed = false;
-  }
-
-  // 4. Check flow session was created
-  const { data: sessions } = await supabase
-    .from("flow_sessions")
-    .select("id, status, flow_id, current_node_id")
-    .eq("flow_id", testFlowId)
-    .eq("contact_id", contactChannel?.contact_id || "none");
-
-  if (sessions?.length) {
-    pass(`Flow session created: ${sessions[0].id} (status: ${sessions[0].status})`);
-  } else {
-    fail("Flow session was NOT created (trigger may not have matched)");
-    allPassed = false;
-  }
-
-  // 5. Check outbound message (flow reply) was attempted
-  if (outbound) {
-    pass(`Outbound message sent: "${outbound.text}" (status: ${outbound.status})`);
-  } else {
-    info("Outbound message not found. This is expected if Zernio API key doesn't have inbox access for this channel.");
-    info("The important thing is that the flow DID execute (check session above).");
-  }
-
-  // 6. Check analytics events
-  const { data: events, count } = await supabase
-    .from("analytics_events")
-    .select("event_type, metadata", { count: "exact" })
-    .eq("flow_id", testFlowId);
-
-  if (count && count > 0) {
-    pass(`Analytics events logged: ${count} events (types: ${events?.map((e) => e.event_type).join(", ")})`);
-  } else {
-    info("No analytics events found (may not have reached node execution)");
-  }
-
-  return allPassed;
-}
-
-async function cleanup() {
-  info("Cleaning up test data...");
-
-  // Find the contact created by this test
-  const { data: contactChannel } = await supabase
-    .from("contact_channels")
-    .select("contact_id")
-    .eq("channel_id", CHANNEL.id)
-    .eq("platform_sender_id", fakeSenderId)
-    .single();
-
-  const contactId = contactChannel?.contact_id;
-
-  if (contactId) {
-    // Delete in order (respecting foreign keys)
-    await supabase.from("analytics_events").delete().eq("flow_id", testFlowId);
-    await supabase.from("flow_sessions").delete().eq("flow_id", testFlowId);
-
-    const { data: conv } = await supabase
-      .from("conversations")
-      .select("id")
-      .eq("contact_id", contactId)
-      .eq("channel_id", CHANNEL.id)
-      .single();
-
-    if (conv) {
-      await supabase.from("messages").delete().eq("conversation_id", conv.id);
-      await supabase.from("conversations").delete().eq("id", conv.id);
-    }
-
-    await supabase.from("contact_channels").delete().eq("contact_id", contactId);
-    await supabase.from("contact_tags").delete().eq("contact_id", contactId);
-    await supabase.from("contacts").delete().eq("id", contactId);
-  }
-
-  await supabase.from("triggers").delete().eq("id", testTriggerId);
-  await supabase.from("flows").delete().eq("id", testFlowId);
-
-  pass("Test data cleaned up");
-}
-
-async function main() {
-  console.log("\n========================================");
-  console.log("  ZernFlow End-to-End Smoke Test");
-  console.log(`  Target: ${BASE_URL}`);
-  console.log("========================================\n");
-
-  try {
-    await setup();
-    console.log("");
-
-    const webhookOk = await fireWebhook();
-    if (!webhookOk) {
-      await cleanup();
-      process.exit(1);
-    }
-    console.log("");
-
-    const allPassed = await verify();
-    console.log("");
-
-    await cleanup();
-
-    console.log("\n========================================");
-    if (allPassed) {
-      console.log("  \x1b[32mALL CHECKS PASSED\x1b[0m");
-    } else {
-      console.log("  \x1b[33mSOME CHECKS FAILED\x1b[0m (see above)");
-    }
-    console.log("========================================\n");
-
-    process.exit(allPassed ? 0 : 1);
-  } catch (err) {
-    fail(`Fatal error: ${err.message}`);
-    console.error(err);
-    await cleanup().catch(() => {});
+for (const k of ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "APP_ENCRYPTION_KEY"]) {
+  if (!process.env[k]) {
+    console.error(`${k} is not set (run scripts/dev-env.mjs first)`);
     process.exit(1);
   }
 }
 
-main();
+function encryptSecret(plaintext, aad) {
+  const key = Buffer.from(process.env.APP_ENCRYPTION_KEY, "base64");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(Buffer.from(aad, "utf8"));
+  const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  return ["enc", "v1", iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), ct.toString("base64url")].join(":");
+}
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { persistSession: false } }
+);
+
+let pass = 0;
+let fail = 0;
+function check(name, ok, detail = "") {
+  if (ok) {
+    pass++;
+    console.log(`  PASS ${name}`);
+  } else {
+    fail++;
+    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
+  }
+}
+
+// ── target workspace ─────────────────────────────────────────────────────────
+if (!workspaceId) {
+  const { data } = await supabase.from("workspaces").select("id, name").limit(1).single();
+  if (!data) {
+    console.error("no workspace found — sign up in the app first");
+    process.exit(1);
+  }
+  workspaceId = data.id;
+  console.log(`workspace: ${data.name} (${workspaceId})`);
+}
+
+const { data: prev } = await supabase
+  .from("workspaces")
+  .select("webhook_token_hash, webhook_secret_encrypted, zernio_webhook_id")
+  .eq("id", workspaceId)
+  .single();
+
+const token = randomBytes(32).toString("base64url");
+const secret = randomBytes(32).toString("base64url");
+const accountId = `smoke-acc-${randomUUID()}`;
+const created = { channelId: null, flowId: null, triggerId: null, contactIds: [] };
+
+try {
+  // ── setup ──────────────────────────────────────────────────────────────────
+  await supabase
+    .from("workspaces")
+    .update({
+      webhook_token_hash: createHash("sha256").update(token).digest("hex"),
+      webhook_secret_encrypted: encryptSecret(secret, workspaceId),
+    })
+    .eq("id", workspaceId);
+
+  const { data: channel } = await supabase
+    .from("channels")
+    .insert({
+      workspace_id: workspaceId,
+      platform: "telegram",
+      late_account_id: accountId,
+      username: "smoke_test_bot",
+      is_active: true,
+    })
+    .select("id")
+    .single();
+  created.channelId = channel.id;
+
+  const sendNodeId = `node-${randomUUID()}`;
+  const triggerNodeId = `node-${randomUUID()}`;
+  const { data: flow } = await supabase
+    .from("flows")
+    .insert({
+      workspace_id: workspaceId,
+      name: `Smoke Test Flow ${Date.now()}`,
+      status: "published",
+      nodes: [
+        { id: triggerNodeId, type: "trigger", data: { triggerType: "keyword" }, position: { x: 0, y: 0 } },
+        { id: sendNodeId, type: "sendMessage", data: { messages: [{ text: "smoke reply" }] }, position: { x: 200, y: 0 } },
+      ],
+      edges: [{ id: "e1", source: triggerNodeId, target: sendNodeId }],
+    })
+    .select("id")
+    .single();
+  created.flowId = flow.id;
+
+  const { data: trigger } = await supabase
+    .from("triggers")
+    .insert({
+      flow_id: flow.id,
+      channel_id: channel.id,
+      type: "keyword",
+      config: { keywords: [{ value: "smoketest", matchType: "exact" }] },
+      is_active: true,
+    })
+    .select("id")
+    .single();
+  created.triggerId = trigger.id;
+
+  // ── payload ────────────────────────────────────────────────────────────────
+  const senderId = `smoke-sender-${randomUUID()}`;
+  const payload = {
+    id: `smoke-evt-${randomUUID()}`,
+    event: "message.received",
+    message: {
+      id: `m-${randomUUID()}`,
+      conversationId: `smoke-conv-${randomUUID()}`,
+      platform: "telegram",
+      platformMessageId: `pm-${randomUUID()}`,
+      direction: "inbound",
+      text: "smoketest",
+      attachments: [],
+      sender: { id: senderId, name: "Smoke Tester", username: null, picture: null },
+      sentAt: new Date().toISOString(),
+      isRead: false,
+    },
+    conversation: {
+      id: `smoke-conv-${randomUUID()}`,
+      platformConversationId: null,
+      participantId: senderId,
+      participantName: "Smoke Tester",
+      participantUsername: null,
+      participantPicture: null,
+      status: "open",
+    },
+    account: { id: accountId, platform: "telegram", username: "smoke_test_bot", displayName: "Smoke Bot" },
+    timestamp: new Date().toISOString(),
+  };
+  const rawBody = JSON.stringify(payload);
+  const url = `${BASE_URL}/api/webhooks/zernio/${token}`;
+  const signature = createHmac("sha256", secret).update(rawBody).digest("hex");
+
+  // ── 1. unsigned -> 401 ─────────────────────────────────────────────────────
+  console.log("\nunsigned delivery:");
+  const unsigned = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: rawBody,
+  });
+  check("unsigned webhook rejected with 401", unsigned.status === 401, `got ${unsigned.status}`);
+
+  // ── 2. signed -> processed ─────────────────────────────────────────────────
+  console.log("signed delivery:");
+  const signed = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-zernio-signature": signature },
+    body: rawBody,
+  });
+  check("signed webhook accepted with 200", signed.status === 200, `got ${signed.status}`);
+
+  const { data: cc } = await supabase
+    .from("contact_channels")
+    .select("contact_id")
+    .eq("channel_id", created.channelId)
+    .eq("platform_sender_id", senderId)
+    .maybeSingle();
+  check("contact created", !!cc);
+  if (cc) created.contactIds.push(cc.contact_id);
+
+  const { data: conv } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("channel_id", created.channelId)
+    .maybeSingle();
+  check("conversation created", !!conv);
+
+  const { data: sessions } = await supabase
+    .from("flow_sessions")
+    .select("id, status")
+    .eq("flow_id", created.flowId);
+  check("flow session executed", (sessions?.length ?? 0) === 1);
+
+  // ── 3. replay -> dedupe ────────────────────────────────────────────────────
+  console.log("replayed delivery:");
+  const replay = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-zernio-signature": signature },
+    body: rawBody,
+  });
+  const replayBody = await replay.json().catch(() => ({}));
+  check("replay returns 200 duplicate", replay.status === 200 && replayBody.duplicate === true);
+
+  const { count: contactCount } = await supabase
+    .from("contact_channels")
+    .select("id", { count: "exact", head: true })
+    .eq("channel_id", created.channelId);
+  check("replay did not duplicate the contact", contactCount === 1, `count=${contactCount}`);
+} finally {
+  // ── cleanup ────────────────────────────────────────────────────────────────
+  console.log("\ncleanup:");
+  if (created.channelId) {
+    await supabase.from("conversations").delete().eq("channel_id", created.channelId);
+  }
+  for (const contactId of created.contactIds) {
+    await supabase.from("contacts").delete().eq("id", contactId);
+  }
+  if (created.channelId) {
+    await supabase.from("channels").delete().eq("id", created.channelId);
+  }
+  if (created.flowId) {
+    await supabase.from("flows").delete().eq("id", created.flowId); // cascades triggers/sessions
+  }
+  await supabase.from("webhook_events").delete().eq("workspace_id", workspaceId).like("event_id", "smoke-evt-%");
+  await supabase
+    .from("workspaces")
+    .update({
+      webhook_token_hash: prev?.webhook_token_hash ?? null,
+      webhook_secret_encrypted: prev?.webhook_secret_encrypted ?? null,
+      zernio_webhook_id: prev?.zernio_webhook_id ?? null,
+    })
+    .eq("id", workspaceId);
+  console.log("  test data removed, webhook credentials restored");
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail === 0 ? 0 : 1);

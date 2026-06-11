@@ -88,6 +88,53 @@ export function setAiKey(
 }
 
 /**
+ * Resolve a webhook capability-URL token (by its sha256 hash) to the owning
+ * workspace and its decrypted webhook secret. The secret is MANDATORY for
+ * processing — callers must 401 when it is null.
+ */
+export async function findWorkspaceByWebhookToken(
+  supabase: SupabaseClient<Database>,
+  tokenHash: string
+): Promise<{ workspaceId: string; webhookSecret: string | null } | null> {
+  const { data } = await supabase
+    .from("workspaces")
+    .select("id, webhook_secret_encrypted")
+    .eq("webhook_token_hash", tokenHash)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  let webhookSecret: string | null = null;
+  if (data.webhook_secret_encrypted && isEncrypted(data.webhook_secret_encrypted)) {
+    try {
+      webhookSecret = decryptSecret(data.webhook_secret_encrypted, data.id);
+    } catch {
+      console.error(`workspace-keys: failed to decrypt webhook secret for workspace ${data.id}`);
+    }
+  }
+  return { workspaceId: data.id, webhookSecret };
+}
+
+/** Store webhook registration credentials (secret encrypted, token hashed). */
+export async function setWebhookCredentials(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  creds: { tokenHash: string; secret: string; zernioWebhookId: string | null }
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from("workspaces")
+    .update({
+      webhook_token_hash: creds.tokenHash,
+      webhook_secret_encrypted: encryptSecret(creds.secret, workspaceId),
+      zernio_webhook_id: creds.zernioWebhookId,
+    })
+    .eq("id", workspaceId)
+    .select("id")
+    .single();
+  return { error: error ? error.message : null };
+}
+
+/**
  * Configured-or-not flags for UI display. Legacy plaintext counts as NOT
  * configured so the UI prompts re-entry.
  */

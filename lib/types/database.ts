@@ -82,6 +82,9 @@ export interface Database {
           ai_provider: string;
           zernio_profile_id: string | null;
           zernio_profile_name: string | null;
+          webhook_token_hash: string | null;
+          webhook_secret_encrypted: string | null;
+          zernio_webhook_id: string | null;
           global_keywords: Json | null;
           created_at: string;
           updated_at: string;
@@ -95,6 +98,9 @@ export interface Database {
           ai_provider?: string;
           zernio_profile_id?: string | null;
           zernio_profile_name?: string | null;
+          webhook_token_hash?: string | null;
+          webhook_secret_encrypted?: string | null;
+          zernio_webhook_id?: string | null;
           global_keywords?: Json | null;
           created_at?: string;
           updated_at?: string;
@@ -108,6 +114,9 @@ export interface Database {
           ai_provider?: string;
           zernio_profile_id?: string | null;
           zernio_profile_name?: string | null;
+          webhook_token_hash?: string | null;
+          webhook_secret_encrypted?: string | null;
+          zernio_webhook_id?: string | null;
           global_keywords?: Json | null;
           updated_at?: string;
         };
@@ -148,8 +157,6 @@ export interface Database {
           username: string | null;
           display_name: string | null;
           profile_picture: string | null;
-          webhook_id: string | null;
-          webhook_secret: string | null;
           is_active: boolean;
           last_comment_cursor: string | null;
           comment_rules: Json | null;
@@ -164,8 +171,6 @@ export interface Database {
           username?: string | null;
           display_name?: string | null;
           profile_picture?: string | null;
-          webhook_id?: string | null;
-          webhook_secret?: string | null;
           is_active?: boolean;
           last_comment_cursor?: string | null;
           comment_rules?: Json | null;
@@ -178,8 +183,6 @@ export interface Database {
           username?: string | null;
           display_name?: string | null;
           profile_picture?: string | null;
-          webhook_id?: string | null;
-          webhook_secret?: string | null;
           is_active?: boolean;
           last_comment_cursor?: string | null;
           comment_rules?: Json | null;
@@ -837,6 +840,28 @@ export interface Database {
           status?: JobStatus;
           attempts?: number;
           last_error?: string | null;
+        };
+        Relationships: [];
+      };
+      webhook_events: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          event_id: string;
+          synthetic: boolean;
+          received_at: string;
+          processed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          event_id: string;
+          synthetic?: boolean;
+          received_at?: string;
+          processed_at?: string | null;
+        };
+        Update: {
+          processed_at?: string | null;
         };
         Relationships: [];
       };
