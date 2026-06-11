@@ -1,25 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { executeFlow } from "@/lib/flow-engine/engine";
+import { requireCronAuth } from "@/lib/cron-auth";
 import type { Json } from "@/lib/types/database";
 
 /**
  * Cron job handler that processes scheduled jobs.
- * Call via Vercel Cron or external cron every 10-30 seconds.
- * GET /api/cron/jobs?key=CRON_SECRET
+ * Call via external cron every 10-30 seconds with:
+ *   Authorization: Bearer $CRON_SECRET
  */
 export async function GET(request: NextRequest) {
-  // Simple auth via query param or header
-  const cronSecret = process.env.CRON_SECRET;
-  const providedSecret =
-    request.nextUrl.searchParams.get("key") ||
-    request.headers.get("authorization")?.replace("Bearer ", "");
-
-  if (!cronSecret || providedSecret !== cronSecret) {
+  if (!requireCronAuth(request)) {
+    const { logSecurityEvent } = await import("@/lib/security-events");
+    await logSecurityEvent("cron_auth_failed", null, { route: "jobs" });
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = await createServiceClient();
+
+  // Webhook dedupe retention: ids older than 7 days can never be replayed by
+  // Zernio (max retry window ~51h), so drop them to keep the table bounded.
+  await supabase
+    .from("webhook_events")
+    .delete()
+    .lt("received_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
 
   // Pick up pending jobs that are due
   const { data: jobs, error } = await supabase
@@ -87,17 +91,7 @@ async function processJob(
 ) {
   switch (job.type) {
     case "resume_flow": {
-      const payload = job.payload as {
-        sessionId: string;
-        flowId: string;
-        channelId: string;
-        contactId: string;
-        conversationId: string;
-        workspaceId: string;
-        nodeId: string;
-        lateConversationId?: string | null;
-        lateAccountId?: string | null;
-      };
+      const payload = job.payload as { sessionId: string };
 
       // Check if session is still active
       const { data: session } = await supabase
@@ -109,15 +103,46 @@ async function processJob(
 
       if (!session) return; // Session was cancelled/completed
 
+      // Re-derive EVERYTHING from owned rows — the payload is never trusted
+      // beyond the session id (defense in depth on top of service-role-only
+      // RLS for scheduled_jobs).
+      const { data: flow } = await supabase
+        .from("flows")
+        .select("workspace_id")
+        .eq("id", session.flow_id)
+        .single();
+      if (!flow) return;
+
+      const { data: channel } = await supabase
+        .from("channels")
+        .select("workspace_id, late_account_id")
+        .eq("id", session.channel_id)
+        .single();
+      if (!channel || channel.workspace_id !== flow.workspace_id) {
+        console.error(`[anomaly] resume_flow: channel/flow workspace mismatch for session ${session.id}`);
+        return;
+      }
+
+      const { data: conversation } = await supabase
+        .from("conversations")
+        .select("id, late_conversation_id, workspace_id")
+        .eq("channel_id", session.channel_id)
+        .eq("contact_id", session.contact_id)
+        .maybeSingle();
+      if (!conversation || conversation.workspace_id !== flow.workspace_id) {
+        console.error(`[anomaly] resume_flow: conversation workspace mismatch for session ${session.id}`);
+        return;
+      }
+
       await executeFlow(supabase, {
         triggerId: "",
-        flowId: payload.flowId,
-        channelId: payload.channelId,
-        contactId: payload.contactId,
-        conversationId: payload.conversationId,
-        workspaceId: payload.workspaceId,
-        lateConversationId: payload.lateConversationId || undefined,
-        lateAccountId: payload.lateAccountId || undefined,
+        flowId: session.flow_id,
+        channelId: session.channel_id,
+        contactId: session.contact_id,
+        conversationId: conversation.id,
+        workspaceId: flow.workspace_id,
+        lateConversationId: conversation.late_conversation_id || undefined,
+        lateAccountId: channel.late_account_id || undefined,
         incomingMessage: {},
       });
       break;
@@ -142,16 +167,12 @@ async function processJob(
       const broadcast = recipient.broadcasts as { workspace_id: string } | null;
       if (!broadcast) return;
 
-      const { data: workspace } = await supabase
-        .from("workspaces")
-        .select("late_api_key_encrypted")
-        .eq("id", broadcast.workspace_id)
-        .single();
-
-      if (!workspace?.late_api_key_encrypted) return;
+      const { getZernioKey } = await import("@/lib/workspace-keys");
+      const apiKey = await getZernioKey(supabase, broadcast.workspace_id);
+      if (!apiKey) return;
 
       const { createZernioClient } = await import("@/lib/zernio-client");
-      const zernio = createZernioClient(workspace.late_api_key_encrypted);
+      const zernio = createZernioClient(apiKey);
 
       const channel = recipient.channels as { late_account_id: string } | null;
       if (!channel) return;

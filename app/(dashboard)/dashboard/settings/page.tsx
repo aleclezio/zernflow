@@ -1,16 +1,18 @@
 import { getWorkspace } from "@/lib/workspace";
+import { workspaceKeyStatus } from "@/lib/workspace-keys";
 import { SettingsView } from "./settings-view";
 
 export default async function SettingsPage() {
   const { workspace } = await getWorkspace();
+  const { hasApiKey, hasAiKey } = workspaceKeyStatus(workspace);
 
   return (
     <SettingsView
       workspace={{
         id: workspace.id,
         name: workspace.name,
-        hasApiKey: !!workspace.late_api_key_encrypted,
-        hasAiKey: !!workspace.ai_api_key,
+        hasApiKey,
+        hasAiKey,
         globalKeywords: (workspace.global_keywords as string[]) ?? [],
       }}
     />

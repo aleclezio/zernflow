@@ -39,3 +39,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 supabase/.temp
+
+# Supabase local CLI state
+supabase/.branches/
+supabase/.temp/
+
+# Next.js dynamic segment, not a secret: re-include against machine-global *token* ignore rules
+!app/api/webhooks/zernio/\[token\]/
+!app/api/webhooks/zernio/\[token\]/**

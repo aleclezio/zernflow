@@ -7,6 +7,11 @@ The open-source ManyChat alternative. Visual flow builder for Instagram, Faceboo
 
 **Live at [zernflow.com](https://zernflow.com)**
 
+> **This fork** (`aleclezio/zernflow`) hardens upstream for multi-client use:
+> profile-scoped workspaces, encrypted key custody, signed webhooks with
+> replay defense, tenant-isolation lockdown, SSRF-guarded HTTP nodes, and a
+> full test suite + CI. See [Security model (this fork)](#security-model-this-fork).
+
 ## What is ZernFlow?
 
 ZernFlow is an open-source alternative to ManyChat. Build visual chatbot flows, manage contacts, send broadcasts, run drip campaigns, and handle live chat conversations across 6 social media platforms.
@@ -54,7 +59,10 @@ npm install
 Create a free project at [supabase.com](https://supabase.com). Then run the SQL migrations in the Supabase SQL editor:
 
 ```bash
-# Run each file in supabase/migrations/ in order (00001 through 00009)
+# Run each file in supabase/migrations/ in order (00001 through 00014),
+# or paste supabase/migrations/ALL_MIGRATIONS.sql in one shot.
+# Local development: `npx supabase start && npx supabase migration up`,
+# then `node scripts/dev-env.mjs` to generate .env.local.
 ```
 
 3. **Configure environment**
@@ -69,7 +77,8 @@ Fill in your Supabase credentials:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-CRON_SECRET=your-cron-secret              # For sequence processor + job scheduler
+CRON_SECRET=your-cron-secret              # For sequence processor + job scheduler (Bearer header only)
+APP_ENCRYPTION_KEY=base64-32-bytes        # Encrypts workspace secrets at rest (see .env.example)
 # AI_GATEWAY_API_KEY=...                  # Optional, for self-hosted (Vercel handles this automatically)
 ```
 
@@ -163,6 +172,74 @@ zernflow/
 └── supabase/
     └── migrations/          # SQL schema + RLS policies (00001-00009)
 ```
+
+## Security model (this fork)
+
+### Per-client onboarding (the scoped-key ritual)
+
+Each workspace is bound to exactly ONE Zernio profile — that binding is the
+multi-client foundation. To onboard a client:
+
+1. In the **Zernio dashboard**, create a profile for the client (if missing)
+   and an **API key scoped to ONLY that profile** (`scope: profiles`,
+   read-write). Never paste the master key into a workspace.
+2. In ZernFlow **Settings → Test Connection**, paste the scoped key.
+   - The key auto-binds when it sees exactly one profile; if it sees several
+     you'll be asked to pick (and warned — a multi-profile key weakens
+     isolation).
+   - The key is stored encrypted (AES-256-GCM, AAD = workspace id); the
+     profile binding is 1:1 and enforced by a unique index.
+3. Channel sync and OAuth connect only ever see the bound profile's accounts.
+
+### Webhooks
+
+- One webhook per workspace at `/api/webhooks/zernio/<token>` — the token is
+  a capability URL (only its sha256 is stored). The HMAC secret is mandatory;
+  unsigned or mis-signed deliveries are rejected before any parsing.
+- Replays are deduped by event id (`webhook_events`, insert-before-process,
+  7-day retention).
+- Registration is attempted automatically on key save, but **profile-scoped
+  keys cannot manage webhooks** (verified live 2026-06-11: the API refuses
+  with "A profile-scoped API key cannot manage webhooks"). Onboarding a
+  workspace therefore includes one operator step — register the webhook with
+  an authorized key (it never enters the app database):
+
+```bash
+ZERNIO_ADMIN_KEY=... node scripts/register-webhook.mjs <workspace-id> https://your-public-url
+```
+
+### Key rotation
+
+- **Zernio key**: paste the new key in Settings (owner only). It must see the
+  already-bound profile, otherwise it is rejected (409).
+- **APP_ENCRYPTION_KEY**: rotating it invalidates every stored secret —
+  ciphertexts fail closed and each workspace owner re-enters their key in
+  Settings. There is no re-encryption tool yet (single-key deployment).
+- **Webhook secret/token**: re-saving the key re-registers the webhook with
+  fresh credentials; the old registration is deleted best-effort.
+
+### Verification
+
+```bash
+npm run lint && npm run typecheck   # static gates
+npm test                            # unit + integration (needs `npx supabase start`)
+bash scripts/check-key-access.sh    # key columns only via lib/workspace-keys.ts
+node scripts/smoke-test.mjs         # live e2e against a running app
+```
+
+### Known residual risks (accepted, tracked)
+
+- **DNS rebinding** against the SSRF guard's resolve-then-fetch window —
+  closed at the deployment layer by a container egress firewall.
+- **Key breadth is unprovable client-side**: a pasted key claiming one
+  profile could still be broader server-side; the scoped-key ritual plus the
+  multi-profile warning are the control.
+- **In-memory rate limits** reset on restart and assume a single node.
+- **At-most-once processing**: a webhook that fails mid-processing is not
+  retried (the dedupe row already exists). Better to drop one event than
+  double-send DMs; an async queue is on the roadmap.
+- 2 `npm audit` moderates in next's bundled postcss (build-time only; the
+  "fix" downgrades next to 9.x).
 
 ## Contributing
 

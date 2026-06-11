@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createZernioClient } from "@/lib/zernio-client";
+import { getZernioKey } from "@/lib/workspace-keys";
+import {
+  getBoundProfileId,
+  ProfileUnboundError,
+  profileUnboundResponse,
+  accountProfileId,
+} from "@/lib/zernio-scope";
 
 async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) {
   const {
@@ -32,18 +39,43 @@ export async function POST() {
   if (!workspace)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!workspace.late_api_key_encrypted) {
+  const apiKey = await getZernioKey(supabase, workspace.id);
+  if (!apiKey) {
     return NextResponse.json(
       { error: "Zernio API key not configured. Go to Settings first." },
       { status: 400 }
     );
   }
 
-  const zernio = createZernioClient(workspace.late_api_key_encrypted);
+  let profileId: string;
+  try {
+    profileId = await getBoundProfileId(supabase, workspace.id);
+  } catch (err) {
+    if (err instanceof ProfileUnboundError) return profileUnboundResponse();
+    throw err;
+  }
+
+  const zernio = createZernioClient(apiKey);
 
   try {
-    const res = await zernio.accounts.listAccounts();
-    const lateAccounts = res.data?.accounts ?? [];
+    const res = await zernio.accounts.listAccounts({ query: { profileId } });
+    const returned: Array<{
+      _id?: string;
+      platform?: string;
+      username?: string;
+      displayName?: string;
+      profileId?: string | { _id?: string };
+    }> = res.data?.accounts ?? [];
+
+    // Defensive post-filter: the server already filtered by profileId, but a
+    // foreign account slipping through would mean cross-client flow firing —
+    // drop it and flag the anomaly.
+    const lateAccounts = returned.filter((a) => accountProfileId(a) === profileId);
+    if (lateAccounts.length !== returned.length) {
+      console.error(
+        `[anomaly] channels/sync: Zernio returned ${returned.length - lateAccounts.length} account(s) outside bound profile despite profileId filter (workspace ${workspace.id})`
+      );
+    }
 
     // Get existing channels for this workspace
     const { data: existingChannels } = await supabase
@@ -57,6 +89,21 @@ export async function POST() {
 
     // The SDK type doesn't declare profilePicture but the API returns it
     const lateAccountIds = new Set(lateAccounts.map((a: { _id?: string }) => a._id).filter(Boolean));
+
+    // Deactivate channels whose Zernio accounts no longer exist in the bound
+    // profile — BEFORE inserts, so the global active-account uniqueness index
+    // never collides when an account moved between profiles/workspaces.
+    let deactivated = 0;
+    for (const channel of existingChannels ?? []) {
+      if (!lateAccountIds.has(channel.late_account_id) && channel.is_active) {
+        await supabase
+          .from("channels")
+          .update({ is_active: false })
+          .eq("id", channel.id);
+        deactivated++;
+      }
+    }
+
     let created = 0;
     let updated = 0;
 
@@ -84,7 +131,9 @@ export async function POST() {
           updated++;
         }
       } else {
-        await supabase.from("channels").insert({
+        // Channel INSERT is service-role only (tenant lockdown): these
+        // accounts were just verified against the workspace's scoped key.
+        await (await createServiceClient()).from("channels").insert({
           workspace_id: workspace.id,
           platform: account.platform as "facebook" | "instagram" | "twitter" | "telegram" | "bluesky" | "reddit",
           late_account_id: account._id,
@@ -94,18 +143,6 @@ export async function POST() {
           is_active: true,
         });
         created++;
-      }
-    }
-
-    // Deactivate channels whose Zernio accounts no longer exist
-    let deactivated = 0;
-    for (const channel of existingChannels ?? []) {
-      if (!lateAccountIds.has(channel.late_account_id) && channel.is_active) {
-        await supabase
-          .from("channels")
-          .update({ is_active: false })
-          .eq("id", channel.id);
-        deactivated++;
       }
     }
 

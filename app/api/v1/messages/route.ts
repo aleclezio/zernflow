@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createZernioClient } from "@/lib/zernio-client";
+import { getZernioKey } from "@/lib/workspace-keys";
 
 /**
  * GET /api/v1/messages?conversationId=...
@@ -30,13 +31,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Conversation not found or missing Zernio ID" }, { status: 404 });
   }
 
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("late_api_key_encrypted")
-    .eq("id", conversation.workspace_id)
-    .single();
-
-  if (!workspace?.late_api_key_encrypted) {
+  const apiKey = await getZernioKey(supabase, conversation.workspace_id);
+  if (!apiKey) {
     return NextResponse.json({ error: "API key not configured" }, { status: 400 });
   }
 
@@ -47,7 +43,7 @@ export async function GET(request: NextRequest) {
 
   // Fetch messages from Zernio API
   try {
-    const zernio = createZernioClient(workspace.late_api_key_encrypted);
+    const zernio = createZernioClient(apiKey);
     const res = await zernio.messages.getInboxConversationMessages({
       path: { conversationId: conversation.late_conversation_id },
       query: { accountId: channel.late_account_id },
@@ -128,19 +124,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Channel not found or missing Zernio account ID" }, { status: 404 });
   }
 
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("late_api_key_encrypted")
-    .eq("id", conversation.workspace_id)
-    .single();
-
-  if (!workspace?.late_api_key_encrypted) {
+  const apiKey = await getZernioKey(supabase, conversation.workspace_id);
+  if (!apiKey) {
     return NextResponse.json({ error: "API key not configured" }, { status: 400 });
   }
 
   // Send via Zernio SDK — Zernio stores the message, no local insert needed
   try {
-    const zernio = createZernioClient(workspace.late_api_key_encrypted);
+    const zernio = createZernioClient(apiKey);
     const res = await zernio.messages.sendInboxMessage({
       path: { conversationId: conversation.late_conversation_id },
       body: { accountId: channel.late_account_id, message: text },
@@ -180,7 +171,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Failed to send message via Zernio API:", error);
     return NextResponse.json(
-      { error: `Failed to send message: ${error}` },
+      { error: "Failed to send message" },
       { status: 500 }
     );
   }

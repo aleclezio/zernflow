@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { scheduleBroadcastDelivery } from "@/lib/scheduler";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/types/database";
@@ -172,8 +172,9 @@ export async function POST(
     );
   }
 
-  // Schedule delivery
-  await scheduleBroadcastDelivery(supabase, broadcastId, recipientIds);
+  // Schedule delivery. scheduled_jobs is service-role only (tenant lockdown);
+  // this route has already verified auth + workspace ownership above.
+  await scheduleBroadcastDelivery(await createServiceClient(), broadcastId, recipientIds);
 
   return NextResponse.json({
     broadcastId,
