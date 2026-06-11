@@ -168,4 +168,9 @@ export interface FlowExecutionContext {
   };
   variables?: Record<string, string>;
   platform?: Platform;
+  /**
+   * Global node budget for one inbound event, shared by reference across
+   * goToFlow hops so flow chains and cycles always terminate.
+   */
+  nodeBudget?: { used: number };
 }

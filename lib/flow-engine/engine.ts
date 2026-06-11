@@ -41,15 +41,21 @@ export async function executeFlow(
     return resumeSession(supabase, activeSession, context);
   }
 
-  // Load flow
+  // Load flow — always scoped to the context workspace.
   const { data: flow } = await supabase
     .from("flows")
     .select("*")
     .eq("id", context.flowId)
+    .eq("workspace_id", context.workspaceId)
     .eq("status", "published")
     .single();
 
   if (!flow) return;
+
+  // Global node budget for this inbound event — shared across goToFlow hops
+  // (the context spread copies the object reference), so flow chains and
+  // cycles cannot run unbounded.
+  context.nodeBudget ??= { used: 0 };
 
   const nodes = flow.nodes as unknown as FlowNode[];
   const edges = flow.edges as unknown as FlowEdge[];
@@ -59,6 +65,7 @@ export async function executeFlow(
     .from("channels")
     .select("platform, late_account_id")
     .eq("id", context.channelId)
+    .eq("workspace_id", context.workspaceId)
     .single();
 
   context.platform = channel?.platform as FlowExecutionContext["platform"];
@@ -72,6 +79,7 @@ export async function executeFlow(
       .from("conversations")
       .select("late_conversation_id")
       .eq("id", context.conversationId)
+      .eq("workspace_id", context.workspaceId)
       .single();
 
     if (conversation?.late_conversation_id) {
@@ -118,6 +126,7 @@ export async function executeFlow(
 }
 
 const MAX_TRAVERSAL_DEPTH = 50;
+const MAX_TOTAL_NODES = 200;
 
 async function resumeSession(
   supabase: SupabaseClient<Database>,
@@ -128,9 +137,13 @@ async function resumeSession(
     .from("flows")
     .select("*")
     .eq("id", session.flow_id)
+    .eq("workspace_id", context.workspaceId)
+    .eq("status", "published")
     .single();
 
   if (!flow) return;
+
+  context.nodeBudget ??= { used: 0 };
 
   const nodes = flow.nodes as unknown as FlowNode[];
   const edges = flow.edges as unknown as FlowEdge[];
@@ -139,6 +152,7 @@ async function resumeSession(
     .from("channels")
     .select("platform, late_account_id")
     .eq("id", context.channelId)
+    .eq("workspace_id", context.workspaceId)
     .single();
 
   context.platform = channel?.platform as FlowExecutionContext["platform"];
@@ -152,6 +166,7 @@ async function resumeSession(
       .from("conversations")
       .select("late_conversation_id")
       .eq("id", context.conversationId)
+      .eq("workspace_id", context.workspaceId)
       .single();
 
     if (conversation?.late_conversation_id) {
@@ -198,6 +213,14 @@ async function traverseNodes(
 ) {
   if (depth >= MAX_TRAVERSAL_DEPTH) {
     console.error(`Flow traversal exceeded max depth (${MAX_TRAVERSAL_DEPTH}), stopping. Flow: ${context.flowId}`);
+    await completeSession(supabase, sessionId);
+    return;
+  }
+  // Global per-event budget: goToFlow restarts traversal with depth 0, but
+  // the budget travels with the context, so chains/cycles terminate.
+  context.nodeBudget ??= { used: 0 };
+  if (++context.nodeBudget.used > MAX_TOTAL_NODES) {
+    console.error(`Flow execution exceeded the global node budget (${MAX_TOTAL_NODES}), stopping. Flow: ${context.flowId}`);
     await completeSession(supabase, sessionId);
     return;
   }
@@ -316,6 +339,7 @@ async function executeSendMessage(
       .from("channels")
       .select("late_account_id, platform")
       .eq("id", context.channelId)
+      .eq("workspace_id", context.workspaceId)
       .single();
 
     if (!channel) return;
@@ -332,6 +356,7 @@ async function executeSendMessage(
       .from("conversations")
       .select("late_conversation_id")
       .eq("id", context.conversationId)
+      .eq("workspace_id", context.workspaceId)
       .single();
 
     if (!conversation?.late_conversation_id) {
@@ -428,6 +453,7 @@ async function executeCondition(
     .from("contacts")
     .select("*, contact_tags(tag_id, tags(name)), contact_custom_fields(field_id, value, custom_field_definitions(slug))")
     .eq("id", context.contactId)
+    .eq("workspace_id", context.workspaceId)
     .single();
 
   if (!contact) return "handle:false";
@@ -718,6 +744,7 @@ async function executeCommentReply(
       .from("channels")
       .select("late_account_id")
       .eq("id", context.channelId)
+      .eq("workspace_id", context.workspaceId)
       .single();
 
     if (!channel) return;
@@ -766,6 +793,7 @@ async function executePrivateReply(
       .from("channels")
       .select("late_account_id")
       .eq("id", context.channelId)
+      .eq("workspace_id", context.workspaceId)
       .single();
 
     if (!channel) return;
@@ -855,6 +883,7 @@ async function executeEnrollSequence(
     .from("sequences")
     .select("id, steps, status")
     .eq("id", data.sequenceId)
+    .eq("workspace_id", context.workspaceId)
     .single();
 
   if (!sequence || sequence.status !== "active") {

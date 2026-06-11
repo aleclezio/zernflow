@@ -89,17 +89,7 @@ async function processJob(
 ) {
   switch (job.type) {
     case "resume_flow": {
-      const payload = job.payload as {
-        sessionId: string;
-        flowId: string;
-        channelId: string;
-        contactId: string;
-        conversationId: string;
-        workspaceId: string;
-        nodeId: string;
-        lateConversationId?: string | null;
-        lateAccountId?: string | null;
-      };
+      const payload = job.payload as { sessionId: string };
 
       // Check if session is still active
       const { data: session } = await supabase
@@ -111,15 +101,46 @@ async function processJob(
 
       if (!session) return; // Session was cancelled/completed
 
+      // Re-derive EVERYTHING from owned rows — the payload is never trusted
+      // beyond the session id (defense in depth on top of service-role-only
+      // RLS for scheduled_jobs).
+      const { data: flow } = await supabase
+        .from("flows")
+        .select("workspace_id")
+        .eq("id", session.flow_id)
+        .single();
+      if (!flow) return;
+
+      const { data: channel } = await supabase
+        .from("channels")
+        .select("workspace_id, late_account_id")
+        .eq("id", session.channel_id)
+        .single();
+      if (!channel || channel.workspace_id !== flow.workspace_id) {
+        console.error(`[anomaly] resume_flow: channel/flow workspace mismatch for session ${session.id}`);
+        return;
+      }
+
+      const { data: conversation } = await supabase
+        .from("conversations")
+        .select("id, late_conversation_id, workspace_id")
+        .eq("channel_id", session.channel_id)
+        .eq("contact_id", session.contact_id)
+        .maybeSingle();
+      if (!conversation || conversation.workspace_id !== flow.workspace_id) {
+        console.error(`[anomaly] resume_flow: conversation workspace mismatch for session ${session.id}`);
+        return;
+      }
+
       await executeFlow(supabase, {
         triggerId: "",
-        flowId: payload.flowId,
-        channelId: payload.channelId,
-        contactId: payload.contactId,
-        conversationId: payload.conversationId,
-        workspaceId: payload.workspaceId,
-        lateConversationId: payload.lateConversationId || undefined,
-        lateAccountId: payload.lateAccountId || undefined,
+        flowId: session.flow_id,
+        channelId: session.channel_id,
+        contactId: session.contact_id,
+        conversationId: conversation.id,
+        workspaceId: flow.workspace_id,
+        lateConversationId: conversation.late_conversation_id || undefined,
+        lateAccountId: channel.late_account_id || undefined,
         incomingMessage: {},
       });
       break;

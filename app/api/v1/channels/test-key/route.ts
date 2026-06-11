@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createZernioClient } from "@/lib/zernio-client";
 import { setZernioKey } from "@/lib/workspace-keys";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -211,11 +211,14 @@ export async function POST(request: NextRequest) {
     (existingChannels ?? []).map((c) => [c.late_account_id, c])
   );
 
+  // Channel INSERT is service-role only (tenant lockdown): these accounts
+  // were just verified against the key and the bound profile.
+  const serviceDb = await createServiceClient();
   for (const account of scoped) {
     if (!account._id) continue;
     if (existingByLateId.has(account._id)) continue;
 
-    await supabase.from("channels").insert({
+    await serviceDb.from("channels").insert({
       workspace_id: workspaceId,
       platform: account.platform as "facebook" | "instagram" | "twitter" | "telegram" | "bluesky" | "reddit",
       late_account_id: account._id,

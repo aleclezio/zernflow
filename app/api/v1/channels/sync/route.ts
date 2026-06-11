@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
 import {
@@ -131,7 +131,9 @@ export async function POST() {
           updated++;
         }
       } else {
-        await supabase.from("channels").insert({
+        // Channel INSERT is service-role only (tenant lockdown): these
+        // accounts were just verified against the workspace's scoped key.
+        await (await createServiceClient()).from("channels").insert({
           workspace_id: workspace.id,
           platform: account.platform as "facebook" | "instagram" | "twitter" | "telegram" | "bluesky" | "reddit",
           late_account_id: account._id,
