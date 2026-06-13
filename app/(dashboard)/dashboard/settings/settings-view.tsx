@@ -488,6 +488,27 @@ export function SettingsView({
 
           <hr className="border-border" />
 
+          {/* Bot Fields */}
+          <section>
+            <div className="flex items-center gap-2">
+              <Hash className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Bot Fields</h2>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Workspace variables you can reuse across flows as {"{{bot.slug}}"}.
+            </p>
+            <Link
+              href="/dashboard/settings/bot-fields"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              <Hash className="h-4 w-4" />
+              Manage Bot Fields
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            </Link>
+          </section>
+
+          <hr className="border-border" />
+
           {/* Save button */}
           <div className="flex items-center gap-3">
             <button
