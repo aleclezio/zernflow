@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database";
+import { messageKeywordMatches, type MessageKeywordConfig } from "@/lib/flow-engine/keyword-match";
 
 interface IncomingMessage {
   text?: string;
@@ -49,28 +50,11 @@ export async function matchTrigger(
     if (match) return match;
   }
 
-  // 3. Check keyword triggers
+  // 3. Check keyword triggers (with excludeKeywords disqualification)
   if (message.text) {
-    const text = message.text.toLowerCase().trim();
-
     for (const trigger of triggers.filter((t) => t.type === "keyword")) {
-      const config = trigger.config as {
-        keywords?: Array<string | { value: string; matchType?: "exact" | "contains" | "startsWith" }>;
-        matchType?: "exact" | "contains" | "startsWith";
-      };
-
-      if (!config.keywords) continue;
-
-      for (const kw of config.keywords) {
-        // Support both formats: plain string or { value, matchType } object
-        const keyword = (typeof kw === "string" ? kw : kw.value).toLowerCase();
-        const matchType =
-          (typeof kw === "object" && kw.matchType) || config.matchType || "contains";
-
-        if (matchType === "exact" && text === keyword) return trigger;
-        if (matchType === "contains" && text.includes(keyword)) return trigger;
-        if (matchType === "startsWith" && text.startsWith(keyword))
-          return trigger;
+      if (messageKeywordMatches(trigger.config as MessageKeywordConfig, message.text)) {
+        return trigger;
       }
     }
   }

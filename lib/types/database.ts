@@ -1000,6 +1000,36 @@ export interface Database {
           },
         ];
       };
+      bot_fields: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          name: string;
+          slug: string;
+          value: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          name: string;
+          slug: string;
+          value?: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          slug?: string;
+          value?: string;
+          description?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: string;

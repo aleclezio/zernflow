@@ -23,6 +23,9 @@ import { safeFetch } from "./safe-fetch";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
 import { resolvePrivateReplyIds } from "./comment-matcher";
+import { pickVariant } from "./pick-variant";
+import { interpolateVariables } from "./interpolate";
+import { loadBotFieldVars } from "./bot-fields";
 
 export async function executeFlow(
   supabase: SupabaseClient<Database>,
@@ -103,6 +106,12 @@ export async function executeFlow(
 
   if (!session) return;
 
+  // Load workspace bot fields into {{bot.*}} (fresh; not persisted to the session).
+  context.variables = {
+    ...(context.variables || {}),
+    ...(await loadBotFieldVars(supabase, context.workspaceId)),
+  };
+
   // Track flow_started
   await supabase.from("analytics_events").insert({
     workspace_id: context.workspaceId,
@@ -181,6 +190,7 @@ async function resumeSession(
   context.variables = {
     ...(context.variables || {}),
     ...((session.variables as Record<string, string>) || {}),
+    ...(await loadBotFieldVars(supabase, context.workspaceId)),
   };
 
   // Update session
@@ -374,7 +384,8 @@ async function executeSendMessage(
   }
 
   for (const msg of data.messages) {
-    const adapted = adaptMessage(msg, context.platform!);
+    const chosen = pickVariant(msg.text ?? "", msg.variations);
+    const adapted = adaptMessage({ ...msg, text: chosen }, context.platform!);
     const text = interpolateVariables(adapted.text, context.variables || {});
 
     try {
@@ -817,7 +828,7 @@ async function executePrivateReply(
   }
   const { commentId, postId } = ids;
 
-  const text = interpolateVariables(data.text, context.variables || {});
+  const text = interpolateVariables(pickVariant(data.text, data.variations), context.variables || {});
 
   try {
     await zernio.comments.sendPrivateReplyToComment({
@@ -928,11 +939,3 @@ async function executeEnrollSequence(
   }
 }
 
-function interpolateVariables(
-  text: string,
-  variables: Record<string, unknown>
-): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    return String(variables[key] ?? `{{${key}}}`);
-  });
-}

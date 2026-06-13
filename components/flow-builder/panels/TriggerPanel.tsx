@@ -13,6 +13,7 @@ interface Keyword {
 interface TriggerPanelData {
   triggerType?: string;
   keywords?: Keyword[];
+  excludeKeywords?: string[];
   payload?: string;
   [key: string]: unknown;
 }
@@ -73,6 +74,23 @@ export function TriggerPanel({ data: rawData, onChange }: TriggerPanelProps) {
       onChange({ ...data, keywords: updated });
     },
     [data, keywords, onChange]
+  );
+
+  const excludeKeywords = data.excludeKeywords || [];
+  const [newExclude, setNewExclude] = useState("");
+
+  const addExclude = useCallback(() => {
+    const trimmed = newExclude.trim();
+    if (!trimmed) return;
+    onChange({ ...data, excludeKeywords: [...excludeKeywords, trimmed] });
+    setNewExclude("");
+  }, [data, excludeKeywords, newExclude, onChange]);
+
+  const removeExclude = useCallback(
+    (index: number) => {
+      onChange({ ...data, excludeKeywords: excludeKeywords.filter((_, i) => i !== index) });
+    },
+    [data, excludeKeywords, onChange]
   );
 
   const showKeywords = triggerType === "keyword" || triggerType === "comment_keyword";
@@ -197,6 +215,60 @@ export function TriggerPanel({ data: rawData, onChange }: TriggerPanelProps) {
               Add keywords that will trigger this flow. Press Enter or click + to add.
             </p>
           )}
+        </div>
+      )}
+
+      {/* Exclude Keywords Section */}
+      {showKeywords && (
+        <div>
+          <label className="mb-2 block text-xs font-semibold text-foreground">
+            Exclude Keywords
+          </label>
+          {excludeKeywords.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {excludeKeywords.map((kw, index) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-foreground"
+                >
+                  {kw}
+                  <button
+                    type="button"
+                    onClick={() => removeExclude(index)}
+                    className="text-muted-foreground/60 hover:text-muted-foreground"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newExclude}
+              onChange={(e) => setNewExclude(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addExclude();
+                }
+              }}
+              placeholder="Skip if message contains..."
+              className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+            <button
+              type="button"
+              onClick={addExclude}
+              disabled={!newExclude.trim()}
+              className="rounded-lg bg-muted p-2 text-foreground transition-colors hover:bg-accent disabled:opacity-40"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            If any of these words appear, the trigger is skipped even when a keyword matched.
+          </p>
         </div>
       )}
 
