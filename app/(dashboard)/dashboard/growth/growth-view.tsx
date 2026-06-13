@@ -12,6 +12,7 @@ import {
   TrendingUp,
   Send,
   Eye,
+  QrCode,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -305,14 +306,23 @@ export function GrowthView({
               Comment-to-DM automation for lead capture and engagement
             </p>
           </div>
-          <button
-            onClick={() => { setEditingId(null); setShowCreate(true); }}
-            disabled={channels.length === 0 || flows.length === 0}
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" />
-            New Comment Rule
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/dashboard/growth/ref-links"
+              className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent"
+            >
+              <QrCode className="h-4 w-4" />
+              Ref Links &amp; QR
+            </Link>
+            <button
+              onClick={() => { setEditingId(null); setShowCreate(true); }}
+              disabled={channels.length === 0 || flows.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              New Comment Rule
+            </button>
+          </div>
         </div>
       </div>
 
