@@ -11,6 +11,7 @@ import {
   Shuffle,
   Hourglass,
   Cog,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NodeType } from "@/lib/types/database";
@@ -26,6 +27,8 @@ export interface ActionNodeProps {
   url?: string;
   flowId?: string;
   message?: string;
+  text?: string;
+  imageUrl?: string;
   paths?: Array<{ name: string; weight: number }>;
   timeout?: number;
   timeoutUnit?: string;
@@ -81,7 +84,7 @@ const actionConfig: Record<
     color: "bg-gray-500",
   },
   privateReply: {
-    icon: Cog,
+    icon: MessageCircle,
     label: "Private Reply",
     color: "bg-gray-500",
   },
@@ -97,7 +100,7 @@ const actionConfig: Record<
   },
 };
 
-function getSummary(nodeData: ActionNodeProps): string | null {
+export function getSummary(nodeData: ActionNodeProps): string | null {
   const type = nodeData.actionType;
   if (!type) return null;
 
@@ -122,6 +125,8 @@ function getSummary(nodeData: ActionNodeProps): string | null {
       return "Subscribe contact";
     case "unsubscribe":
       return "Unsubscribe contact";
+    case "privateReply":
+      return nodeData.text ? `DM: "${nodeData.text}"` : null;
     case "abSplit":
       if (nodeData.paths && nodeData.paths.length > 0) {
         return nodeData.paths.map((p) => `${p.name}: ${p.weight}%`).join(", ");
