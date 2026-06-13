@@ -4,11 +4,16 @@ import { authenticateRequest } from "@/lib/api-auth";
 
 export const maxDuration = 30;
 
+const MAX_BYTES = 5_000_000; // 5 MB upload cap (whole file is read into memory)
+const MAX_ROWS = 10_000; // per-import row cap
+
 /**
  * POST /api/v1/contacts/import  (multipart: field "file" = CSV)
  * Columns (case-insensitive headers): name/display_name (required), email
- * (optional), tags (optional, comma-separated). Batched 50 at a time.
- * Active-workspace scoped.
+ * (optional), tags (optional, comma-separated). Active-workspace scoped.
+ *
+ * NOTE: this CREATES contacts (no dedup/upsert on email) — re-importing the same
+ * file produces duplicates. Email-based idempotency is a tracked follow-up.
  */
 export async function POST(request: NextRequest) {
   const auth = await authenticateRequest(request);
@@ -19,97 +24,107 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
 
-  if (!file) {
+  if (!file)
     return NextResponse.json(
       { error: "No file provided. Send a CSV file as 'file' in multipart form data." },
       { status: 400 }
     );
-  }
-  if (!file.name.endsWith(".csv")) {
+  if (!file.name.endsWith(".csv"))
     return NextResponse.json({ error: "Only CSV files are supported." }, { status: 400 });
-  }
+  if (file.size > MAX_BYTES)
+    return NextResponse.json({ error: "File too large (max 5 MB)." }, { status: 400 });
 
   const rows = parseCSV(await file.text());
-  if (rows.length < 2) {
+  if (rows.length < 2)
     return NextResponse.json(
       { error: "CSV must have a header row and at least one data row." },
       { status: 400 }
     );
-  }
 
   const headers = rows[0].map((h) => h.toLowerCase().trim());
   const dataRows = rows.slice(1);
+  if (dataRows.length > MAX_ROWS)
+    return NextResponse.json(
+      { error: `Too many rows (max ${MAX_ROWS}). Split the file and retry.` },
+      { status: 400 }
+    );
+
   const nameIdx = headers.findIndex((h) => h === "name" || h === "display_name" || h === "displayname");
   const emailIdx = headers.findIndex((h) => h === "email" || h === "email_address");
   const tagsIdx = headers.findIndex((h) => h === "tags" || h === "tag");
-
-  if (nameIdx === -1) {
+  if (nameIdx === -1)
     return NextResponse.json(
       { error: "CSV must have a 'name' or 'display_name' column." },
       { status: 400 }
     );
-  }
 
   let created = 0;
   let skipped = 0;
-  let tagCount = 0;
   const errors: string[] = [];
+  // Built as we insert; correlates each new contact id to its CSV row's tags by
+  // INSERT ORDER (not display_name — names aren't unique, so a name-based lookup
+  // would misattribute tags across duplicate-named rows).
+  const contactTags: Array<{ contactId: string; tags: string[] }> = [];
 
   for (let i = 0; i < dataRows.length; i += 50) {
     const batch = dataRows.slice(i, i + 50);
+    const inserts: Array<{ workspace_id: string; display_name: string; email: string | null; is_subscribed: boolean }> = [];
+    const rowTags: string[][] = []; // rowTags[k] aligns with inserts[k]
 
-    const contactInserts = batch
-      .map((row) => {
-        const name = row[nameIdx]?.trim();
-        if (!name) {
-          skipped++;
-          return null;
-        }
-        return {
-          workspace_id: workspaceId,
-          display_name: name,
-          email: emailIdx !== -1 ? row[emailIdx]?.trim() || null : null,
-          is_subscribed: true,
-        };
-      })
-      .filter((c): c is { workspace_id: string; display_name: string; email: string | null; is_subscribed: boolean } => c !== null);
+    for (const row of batch) {
+      const name = row[nameIdx]?.trim();
+      if (!name) {
+        skipped++;
+        continue;
+      }
+      inserts.push({
+        workspace_id: workspaceId,
+        display_name: name,
+        email: emailIdx !== -1 ? row[emailIdx]?.trim() || null : null,
+        is_subscribed: true,
+      });
+      rowTags.push(
+        tagsIdx !== -1
+          ? (row[tagsIdx]?.split(",").map((t) => t.trim()).filter(Boolean) ?? [])
+          : []
+      );
+    }
+    if (inserts.length === 0) continue;
 
-    if (contactInserts.length === 0) continue;
-
-    const { data: insertedContacts, error } = await supabase
-      .from("contacts")
-      .insert(contactInserts)
-      .select("id, display_name");
-
-    if (error) {
+    const { data: inserted, error } = await supabase.from("contacts").insert(inserts).select("id");
+    if (error || !inserted) {
       errors.push(`Batch ${Math.floor(i / 50) + 1}: failed`);
       continue;
     }
-    created += (insertedContacts ?? []).length;
+    created += inserted.length;
+    inserted.forEach((c, k) => {
+      if (rowTags[k]?.length) contactTags.push({ contactId: c.id, tags: rowTags[k] });
+    });
+  }
 
-    if (tagsIdx !== -1 && insertedContacts) {
-      for (let j = 0; j < batch.length; j++) {
-        const tagsRaw = batch[j][tagsIdx]?.trim();
-        if (!tagsRaw) continue;
-        const tagNames = tagsRaw.split(",").map((t) => t.trim()).filter(Boolean);
-        if (tagNames.length === 0) continue;
+  // Tags: upsert each unique name ONCE (not per row), then batch-link. Avoids the
+  // per-tag round-trip storm and dedups via the (workspace_id,name) unique index.
+  let tagCount = 0;
+  const uniqueNames = [...new Set(contactTags.flatMap((c) => c.tags))];
+  if (uniqueNames.length > 0) {
+    const { data: tags } = await supabase
+      .from("tags")
+      .upsert(uniqueNames.map((name) => ({ workspace_id: workspaceId, name })), {
+        onConflict: "workspace_id,name",
+      })
+      .select("id, name");
+    const tagIdByName = new Map((tags ?? []).map((t) => [t.name, t.id]));
 
-        const contactName = batch[j][nameIdx]?.trim();
-        const contact = insertedContacts.find((c) => c.display_name === contactName);
-        if (!contact) continue;
-
-        for (const tagName of tagNames) {
-          const { data: tag } = await supabase
-            .from("tags")
-            .upsert({ workspace_id: workspaceId, name: tagName }, { onConflict: "workspace_id,name" })
-            .select("id")
-            .single();
-          if (tag) {
-            await supabase.from("contact_tags").upsert({ contact_id: contact.id, tag_id: tag.id });
-            tagCount++;
-          }
-        }
+    const links: Array<{ contact_id: string; tag_id: string }> = [];
+    for (const { contactId, tags: names } of contactTags) {
+      for (const n of names) {
+        const tagId = tagIdByName.get(n);
+        if (tagId) links.push({ contact_id: contactId, tag_id: tagId });
       }
+    }
+    if (links.length > 0) {
+      const { error } = await supabase.from("contact_tags").upsert(links);
+      if (!error) tagCount = links.length;
     }
   }
 

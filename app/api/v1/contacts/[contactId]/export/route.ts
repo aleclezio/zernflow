@@ -26,6 +26,10 @@ export async function GET(
 
   if (!contact) return NextResponse.json({ error: "Contact not found" }, { status: 404 });
 
+  // ISOLATION INVARIANT: the contact above is workspace-verified, and every fetch
+  // below chains off its id (contact_id / its own conversation ids) — so all rows
+  // belong to that contact's workspace. Keep it that way: never fetch related data
+  // by anything other than this verified contact's own ids.
   const [channels, tags, customFields, conversations, enrollments] = await Promise.all([
     supabase.from("contact_channels").select("*").eq("contact_id", contactId),
     supabase.from("contact_tags").select("*, tags(name, color)").eq("contact_id", contactId),

@@ -87,6 +87,25 @@ describe("flow clone", () => {
     const res = await flowClone(postJson({}), { params: Promise.resolve({ flowId }) });
     expect(res.status).toBe(404);
   });
+
+  it("copies triggers as INACTIVE (a clone must not start firing)", async () => {
+    const a = await createTestUser("qw-clone-trig");
+    currentClient = a.client;
+    const flowId = await seedFlow(a.workspaceId);
+    await serviceClient()
+      .from("triggers")
+      .insert({ flow_id: flowId, type: "keyword", config: {}, priority: 0, is_active: true });
+
+    const res = await flowClone(postJson({}), { params: Promise.resolve({ flowId }) });
+    expect(res.status).toBe(201);
+    const cloned = await res.json();
+    const { data: triggers } = await serviceClient()
+      .from("triggers")
+      .select("is_active")
+      .eq("flow_id", cloned.id);
+    expect(triggers!.length).toBeGreaterThan(0);
+    expect(triggers!.every((t) => t.is_active === false)).toBe(true);
+  });
 });
 
 describe("flow import", () => {
@@ -180,6 +199,24 @@ describe("dashboard stats", () => {
     const body = await res.json();
     expect(body.totalContacts).toBeGreaterThanOrEqual(2);
   });
+
+  it("does NOT count another workspace's contacts", async () => {
+    const a = await createTestUser("qw-stats-a");
+    const b = await createTestUser("qw-stats-b");
+    await serviceClient().from("contacts").insert([
+      { workspace_id: a.workspaceId, display_name: "A1" },
+      { workspace_id: a.workspaceId, display_name: "A2" },
+    ]);
+    await serviceClient().from("contacts").insert([
+      { workspace_id: b.workspaceId, display_name: "B1" },
+      { workspace_id: b.workspaceId, display_name: "B2" },
+      { workspace_id: b.workspaceId, display_name: "B3" },
+    ]);
+    currentClient = a.client;
+
+    const body = await (await dashboardStats(get())).json();
+    expect(body.totalContacts).toBe(2); // A's two only — never B's three
+  });
 });
 
 describe("contacts CSV import", () => {
@@ -197,5 +234,32 @@ describe("contacts CSV import", () => {
     const body = await res.json();
     expect(body.created).toBe(2);
     expect(body.tagCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("attaches each row's tags to the RIGHT contact even with duplicate names", async () => {
+    const a = await createTestUser("qw-csv-dup");
+    currentClient = a.client;
+
+    const csv = "name,tags\nAlice,vip\nAlice,lead\n";
+    const fd = new FormData();
+    fd.append("file", new File([csv], "dup.csv", { type: "text/csv" }));
+    const res = await contactsImport(new NextRequest(URL, { method: "POST", body: fd }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).created).toBe(2);
+
+    // Each "Alice" must carry exactly her own row's tag — never both on one.
+    const svc = serviceClient();
+    const { data: contacts } = await svc
+      .from("contacts")
+      .select("id, contact_tags(tags(name))")
+      .eq("workspace_id", a.workspaceId)
+      .eq("display_name", "Alice");
+    expect(contacts!.length).toBe(2);
+    const tagSets = contacts!.map(
+      (c) => (c.contact_tags as { tags: { name: string } | null }[]).map((ct) => ct.tags?.name).filter(Boolean)
+    );
+    // No contact has both tags; union is {vip, lead}.
+    expect(tagSets.every((s) => s.length === 1)).toBe(true);
+    expect(new Set(tagSets.flat())).toEqual(new Set(["vip", "lead"]));
   });
 });
