@@ -56,6 +56,7 @@ export async function POST(
   const body = await request.json().catch(() => ({}));
   const content = typeof body?.content === "string" ? body.content.trim() : "";
   if (!content) return NextResponse.json({ error: "content is required" }, { status: 400 });
+  if (content.length > 10000) return NextResponse.json({ error: "Note is too long" }, { status: 400 });
 
   const { data, error } = await supabase
     .from("conversation_notes")

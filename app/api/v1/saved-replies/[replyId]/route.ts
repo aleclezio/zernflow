@@ -12,10 +12,24 @@ export async function PUT(
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
-  const updates: Record<string, unknown> = {};
-  if (body?.title !== undefined) updates.title = body.title;
-  if (body?.content !== undefined) updates.content = body.content;
-  if (body?.shortcut !== undefined) updates.shortcut = body.shortcut || null;
+  const updates: { title?: string; content?: string; shortcut?: string | null } = {};
+  if (body?.title !== undefined) {
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    if (!title || title.length > 200) return NextResponse.json({ error: "Invalid title" }, { status: 400 });
+    updates.title = title;
+  }
+  if (body?.content !== undefined) {
+    const content = typeof body.content === "string" ? body.content.trim() : "";
+    if (!content || content.length > 10000) return NextResponse.json({ error: "Invalid content" }, { status: 400 });
+    updates.content = content;
+  }
+  if (body?.shortcut !== undefined) {
+    if (body.shortcut !== null && typeof body.shortcut !== "string")
+      return NextResponse.json({ error: "Invalid shortcut" }, { status: 400 });
+    const shortcut = typeof body.shortcut === "string" ? body.shortcut.trim() : "";
+    if (shortcut.length > 50) return NextResponse.json({ error: "Invalid shortcut" }, { status: 400 });
+    updates.shortcut = shortcut || null;
+  }
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }

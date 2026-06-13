@@ -24,9 +24,14 @@ export async function POST(request: NextRequest) {
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
-  const { title, content, shortcut } = body ?? {};
+  const title = typeof body?.title === "string" ? body.title.trim() : "";
+  const content = typeof body?.content === "string" ? body.content.trim() : "";
+  const shortcut = typeof body?.shortcut === "string" ? body.shortcut.trim() : "";
   if (!title || !content) {
     return NextResponse.json({ error: "title and content are required" }, { status: 400 });
+  }
+  if (title.length > 200 || content.length > 10000 || shortcut.length > 50) {
+    return NextResponse.json({ error: "Field exceeds maximum length" }, { status: 400 });
   }
 
   const supabase = await createClient();
