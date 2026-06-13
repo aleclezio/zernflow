@@ -5,6 +5,7 @@
  */
 
 import type { Node, Edge } from "@xyflow/react";
+import { interpolateVariables } from "./interpolate";
 
 // --- Types ---
 
@@ -61,13 +62,15 @@ export interface SimulationResult {
 
 // --- Helpers ---
 
+// Delegate to the shared interpolation so the preview matches runtime exactly
+// (incl. dotted {{bot.slug}} keys). Bot-field values aren't seeded in the
+// simulator, so {{bot.*}} renders literal in preview — consistent with any
+// other unknown variable.
 function interpolate(
   text: string,
   variables: Record<string, string>
 ): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    return variables[key] ?? `{{${key}}}`;
-  });
+  return interpolateVariables(text, variables);
 }
 
 function evaluateCondition(

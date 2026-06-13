@@ -45,6 +45,9 @@ export interface TriggerNodeData {
 export interface SendMessageNodeData {
   messages: Array<{
     text?: string;
+    /** Optional alternative phrasings; when set, the engine sends a random one
+     *  instead of `text` (rotation avoids identical mass-replies). */
+    variations?: string[];
     imageUrl?: string;
     quickReplies?: Array<{ title: string; payload: string }>;
     buttons?: Array<{
@@ -131,6 +134,8 @@ export interface CommentReplyNodeData {
 export interface PrivateReplyNodeData {
   /** Text to send as a private DM to the commenter. Supports {{variable}} interpolation. */
   text: string;
+  /** Optional alternative phrasings; when set, a random one is sent instead of `text`. */
+  variations?: string[];
   imageUrl?: string;
 }
 
