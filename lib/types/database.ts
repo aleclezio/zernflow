@@ -861,6 +861,33 @@ export interface Database {
         Update: Record<string, never>;
         Relationships: [];
       };
+      api_keys: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          last_used_at: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          last_used_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          last_used_at?: string | null;
+        };
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: string;
