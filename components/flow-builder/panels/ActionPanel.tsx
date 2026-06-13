@@ -25,6 +25,8 @@ interface ActionPanelData {
   timeoutUnit?: string;
   confirmed?: boolean;
   sequenceId?: string;
+  text?: string;
+  imageUrl?: string;
   [key: string]: unknown;
 }
 
@@ -57,6 +59,8 @@ export function ActionPanel({ data: rawData, onChange }: ActionPanelProps) {
       return <SubscribeConfig data={data} onChange={onChange} />;
     case "humanTakeover":
       return <HumanTakeoverConfig data={data} onChange={onChange} />;
+    case "privateReply":
+      return <PrivateReplyConfig data={data} onChange={onChange} />;
     case "abSplit":
       return <ABSplitConfig data={data} onChange={onChange} />;
     case "smartDelay":
@@ -377,6 +381,55 @@ function HumanTakeoverConfig({ data, onChange }: ActionSubPanelProps) {
         />
         <p className="mt-1.5 text-xs text-muted-foreground">
           This message will be visible to agents as an internal note.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ───────── Private Reply (comment → DM) Config ───────── */
+function PrivateReplyConfig({ data, onChange }: ActionSubPanelProps) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-muted p-4">
+        <p className="text-sm font-medium text-foreground">Private Reply (DM)</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Sends a private direct message to whoever left the comment that triggered
+          this flow. Use only after a <span className="font-medium">Comment Keyword</span> trigger.
+        </p>
+      </div>
+
+      <div>
+        <label className="mb-2 block text-xs font-semibold text-foreground">
+          Message
+        </label>
+        <textarea
+          value={data.text || ""}
+          onChange={(e) => onChange({ ...data, text: e.target.value })}
+          placeholder="Hi! Here's the link you asked for: ..."
+          rows={4}
+          className="w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <p className="mt-1.5 text-[11px] text-muted-foreground/60">
+          Use {"{{variable}}"} for dynamic values (e.g. {"{{commenter_name}}"}).
+        </p>
+      </div>
+
+      <div>
+        <label className="mb-2 block text-xs font-semibold text-foreground">
+          Image URL (optional)
+        </label>
+        <input
+          type="url"
+          value={data.imageUrl || ""}
+          onChange={(e) =>
+            onChange({ ...data, imageUrl: e.target.value || undefined })
+          }
+          placeholder="https://..."
+          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Optional image attached to the DM.
         </p>
       </div>
     </div>

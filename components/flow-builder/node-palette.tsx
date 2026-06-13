@@ -15,6 +15,7 @@ import {
   Hourglass,
   Sparkles,
   ListOrdered,
+  MessageCircle,
 } from "lucide-react";
 import type { DragEvent } from "react";
 
@@ -99,6 +100,13 @@ const categories: PaletteCategory[] = [
         label: "Set Field",
         icon: FileText,
         actionType: "setCustomField",
+      },
+      {
+        type: "action",
+        nodeType: "privateReply",
+        label: "Private Reply (DM)",
+        icon: MessageCircle,
+        actionType: "privateReply",
       },
       {
         type: "action",
