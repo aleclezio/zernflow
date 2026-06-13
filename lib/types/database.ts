@@ -942,6 +942,64 @@ export interface Database {
         };
         Relationships: [];
       };
+      ref_links: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          flow_id: string;
+          channel_id: string | null;
+          name: string;
+          slug: string;
+          clicks: number;
+          conversions: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          flow_id: string;
+          channel_id?: string | null;
+          name: string;
+          slug: string;
+          clicks?: number;
+          conversions?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          flow_id?: string;
+          channel_id?: string | null;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ref_links_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ref_links_flow_id_fkey";
+            columns: ["flow_id"];
+            isOneToOne: false;
+            referencedRelation: "flows";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ref_links_channel_id_fkey";
+            columns: ["channel_id"];
+            isOneToOne: false;
+            referencedRelation: "channels";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       webhook_events: {
         Row: {
           id: string;
@@ -1212,6 +1270,18 @@ export interface Database {
       increment_broadcast_failed: {
         Args: {
           b_id: string;
+        };
+        Returns: undefined;
+      };
+      increment_ref_link_clicks: {
+        Args: {
+          link_id: string;
+        };
+        Returns: undefined;
+      };
+      increment_ref_link_conversions: {
+        Args: {
+          link_id: string;
         };
         Returns: undefined;
       };
