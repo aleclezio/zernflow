@@ -172,7 +172,7 @@ describe("POST /api/v1/channels/test-key", () => {
     const body = createWebhookSettings.mock.calls[0][0].body;
     expect(body.url).toContain("/api/webhooks/zernio/");
     expect(body.secret).toBeTruthy();
-    expect(body.events).toEqual(["message.received"]);
+    expect(body.events).toEqual(["message.received", "comment.received"]);
 
     const { data: ws } = await serviceClient()
       .from("workspaces")

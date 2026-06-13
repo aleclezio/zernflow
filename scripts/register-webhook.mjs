@@ -92,7 +92,7 @@ if (ws.zernio_webhook_id) {
 }
 
 const res = await zernio.webhooks.createWebhookSettings({
-  body: { name: `zernflow-${workspaceId.slice(0, 8)}`, url, secret, events: ["message.received"] },
+  body: { name: `zernflow-${workspaceId.slice(0, 8)}`, url, secret, events: ["message.received", "comment.received"] },
 });
 const webhookId = res.data?.webhook?._id;
 if (!webhookId) {

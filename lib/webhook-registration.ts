@@ -51,7 +51,7 @@ export async function registerWorkspaceWebhook(
         name: `zernflow-${workspaceId.slice(0, 8)}`,
         url,
         secret,
-        events: ["message.received"],
+        events: ["message.received", "comment.received"],
       },
     });
     webhookId = res.data?.webhook?._id ?? null;

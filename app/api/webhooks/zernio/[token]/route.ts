@@ -6,6 +6,7 @@ import { findWorkspaceByWebhookToken } from "@/lib/workspace-keys";
 import { pickSignatureHeader, resolveEventId, sha256Hex, verifySignature } from "@/lib/webhook-verify";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logSecurityEvent } from "@/lib/security-events";
+import { matchCommentTrigger, type CommentTrigger } from "@/lib/flow-engine/comment-matcher";
 
 /**
  * POST /api/webhooks/zernio/[token]
@@ -71,6 +72,25 @@ interface WebhookPayload {
   timestamp: string;
 }
 
+interface CommentWebhookPayload {
+  id?: string;
+  event: "comment.received";
+  comment: {
+    id: string;
+    postId: string | null;
+    platformPostId: string;
+    platform: string;
+    text: string;
+    author: { id: string; username?: string; name?: string; picture?: string | null };
+    createdAt: string;
+    isReply: boolean;
+    parentCommentId: string | null;
+  };
+  post: { id: string | null; platformPostId: string };
+  account: { id: string; platform: string; username: string };
+  timestamp: string;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -106,8 +126,12 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // 6. Event filter + loop guard on outbound.
-  if (payload.event !== "message.received" || payload.message?.direction === "outbound") {
+  // 6. Event filter. We process inbound DMs and inbound comments; our own
+  // outbound messages and every other event type are acked + skipped.
+  const isMessage =
+    payload.event === "message.received" && payload.message?.direction !== "outbound";
+  const isComment = payload.event === "comment.received";
+  if (!isMessage && !isComment) {
     return NextResponse.json({ ok: true, skipped: true });
   }
 
@@ -136,7 +160,13 @@ export async function POST(
   // dedupe row means a retry of a PARTIALLY processed event no-ops. That is
   // the at-most-once choice: better to drop one event than double-send DMs.
   try {
-    const response = await processEvent(supabase, ws.workspaceId, payload);
+    const response = isComment
+      ? await processCommentEvent(
+          supabase,
+          ws.workspaceId,
+          payload as unknown as CommentWebhookPayload
+        )
+      : await processEvent(supabase, ws.workspaceId, payload);
     await supabase
       .from("webhook_events")
       .update({ processed_at: new Date().toISOString() })
@@ -319,6 +349,192 @@ async function processEvent(
   }
 
   return NextResponse.json({ ok: true });
+}
+
+// ── Comments (comment.received → comment_keyword → private-reply DM) ─────────
+
+async function processCommentEvent(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  workspaceId: string,
+  payload: CommentWebhookPayload
+) {
+  const { comment, account } = payload;
+
+  // Channel lookup is WORKSPACE-SCOPED — same tenant invariant as messages.
+  const { data: channel } = await supabase
+    .from("channels")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .eq("late_account_id", account.id)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!channel) {
+    return NextResponse.json({ ok: true, skipped: true, reason: "unknown_account" });
+  }
+
+  // Loop guard: never act on a comment authored by one of this workspace's
+  // own connected accounts (e.g. our own reply showing up as a comment).
+  if (comment.author?.username) {
+    const { data: ownChannel } = await supabase
+      .from("channels")
+      .select("id")
+      .eq("workspace_id", channel.workspace_id)
+      .eq("username", comment.author.username)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (ownChannel) {
+      return NextResponse.json({ ok: true, skipped: true, reason: "author_is_own_account" });
+    }
+  }
+
+  // Active comment_keyword triggers for this channel; matching is the tested
+  // pure function in comment-matcher.ts (keyword + post-scope + exclude).
+  const { data: triggerRows } = await supabase
+    .from("triggers")
+    .select("id, flow_id, channel_id, is_active, priority, config")
+    .eq("channel_id", channel.id)
+    .eq("type", "comment_keyword")
+    .eq("is_active", true);
+
+  const matched = matchCommentTrigger(
+    comment.text,
+    comment.platformPostId,
+    (triggerRows ?? []) as unknown as CommentTrigger[]
+  );
+
+  const logBase = {
+    channel_id: channel.id,
+    workspace_id: channel.workspace_id,
+    post_id: comment.platformPostId,
+    platform_comment_id: comment.id,
+    author_id: comment.author?.id || null,
+    author_name: comment.author?.name || null,
+    author_username: comment.author?.username || null,
+    comment_text: comment.text,
+  };
+
+  if (!matched) {
+    // comment_logs (channel_id, platform_comment_id) is unique → the upsert is
+    // also the comment-level dedupe, on top of the webhook_events event dedupe.
+    await supabase
+      .from("comment_logs")
+      .upsert(
+        { ...logBase, matched_trigger_id: null, dm_sent: false, reply_sent: false },
+        { onConflict: "channel_id,platform_comment_id" }
+      );
+    return NextResponse.json({ ok: true, matched: false });
+  }
+
+  // Upsert the commenter as a contact, scoped to this channel.
+  const senderId = comment.author?.id || `comment_${comment.id}`;
+  const senderName = comment.author?.name || comment.author?.username || senderId;
+
+  let contactId: string;
+  const { data: existing } = await supabase
+    .from("contact_channels")
+    .select("contact_id")
+    .eq("channel_id", channel.id)
+    .eq("platform_sender_id", senderId)
+    .maybeSingle();
+
+  if (existing) {
+    contactId = existing.contact_id;
+    await supabase
+      .from("contacts")
+      .update({ last_interaction_at: new Date().toISOString() })
+      .eq("id", contactId);
+  } else {
+    const { data: newContact } = await supabase
+      .from("contacts")
+      .insert({
+        workspace_id: channel.workspace_id,
+        display_name: senderName,
+        avatar_url: comment.author?.picture || null,
+        last_interaction_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (!newContact) {
+      await supabase
+        .from("comment_logs")
+        .upsert(
+          { ...logBase, matched_trigger_id: matched.id, dm_sent: false, reply_sent: false, error: "failed to create contact" },
+          { onConflict: "channel_id,platform_comment_id" }
+        );
+      return NextResponse.json({ error: "Failed to create contact" }, { status: 500 });
+    }
+
+    contactId = newContact.id;
+    await supabase.from("contact_channels").insert({
+      contact_id: contactId,
+      channel_id: channel.id,
+      platform_sender_id: senderId,
+      platform_username: comment.author?.username || null,
+    });
+  }
+
+  // Conversation the private-reply DM will live in.
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .upsert(
+      {
+        workspace_id: channel.workspace_id,
+        channel_id: channel.id,
+        contact_id: contactId,
+        platform: channel.platform,
+        status: "open",
+        last_message_at: new Date().toISOString(),
+        last_message_preview: `[comment] ${(comment.text || "").slice(0, 80)}`,
+      },
+      { onConflict: "channel_id,contact_id" }
+    )
+    .select("id")
+    .single();
+
+  let dmSent = false;
+  if (conversation) {
+    try {
+      // comment_id + post_id are REQUIRED by executePrivateReply for the
+      // sendPrivateReplyToComment call — pass the platform ids explicitly.
+      await executeFlow(supabase, {
+        triggerId: matched.id,
+        flowId: matched.flow_id,
+        channelId: channel.id,
+        contactId,
+        conversationId: conversation.id,
+        workspaceId: channel.workspace_id,
+        incomingMessage: {
+          text: comment.text,
+          sender: {
+            id: senderId,
+            name: comment.author?.name,
+            username: comment.author?.username || undefined,
+          },
+        },
+        lateAccountId: account.id,
+        variables: {
+          comment_id: comment.id,
+          post_id: comment.platformPostId,
+          comment_text: comment.text,
+          commenter_name: senderName,
+        },
+      });
+      dmSent = true;
+    } catch (err) {
+      console.error("Comment flow execution error:", err);
+    }
+  }
+
+  await supabase
+    .from("comment_logs")
+    .upsert(
+      { ...logBase, matched_trigger_id: matched.id, dm_sent: dmSent, reply_sent: false },
+      { onConflict: "channel_id,platform_comment_id" }
+    );
+
+  return NextResponse.json({ ok: true, matched: true });
 }
 
 // ── Global keywords ─────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ import { adaptMessage } from "./platform-adapter";
 import { safeFetch } from "./safe-fetch";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
+import { resolvePrivateReplyIds } from "./comment-matcher";
 
 export async function executeFlow(
   supabase: SupabaseClient<Database>,
@@ -174,7 +175,13 @@ async function resumeSession(
     }
   }
 
-  context.variables = (session.variables as Record<string, string>) || {};
+  // Merge, don't clobber: keep this trigger's incoming variables (e.g. a
+  // comment's comment_id/post_id) that aren't part of the persisted session.
+  // Session-stored values win on key conflicts.
+  context.variables = {
+    ...(context.variables || {}),
+    ...((session.variables as Record<string, string>) || {}),
+  };
 
   // Update session
   await supabase
@@ -800,14 +807,15 @@ async function executePrivateReply(
     lateAccountId = channel.late_account_id;
   }
 
-  const commentId = context.variables?.comment_id || context.incomingMessage.sender?.id;
-  if (!commentId) return;
-
-  const postId = context.variables?.post_id;
-  if (!postId) {
-    console.error("No post_id in context variables for privateReply node");
+  // Fail-closed: a private reply targets the PLATFORM comment id + post id set
+  // by the comment webhook. Never fall back to the commenter's user id — that
+  // silently mis-targets the DM (see comment-matcher.resolvePrivateReplyIds).
+  const ids = resolvePrivateReplyIds(context.variables);
+  if (!ids) {
+    console.error("privateReply skipped: missing comment_id/post_id in flow variables");
     return;
   }
+  const { commentId, postId } = ids;
 
   const text = interpolateVariables(data.text, context.variables || {});
 

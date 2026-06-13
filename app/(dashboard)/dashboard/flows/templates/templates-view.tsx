@@ -13,6 +13,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/client-url";
 import Link from "next/link";
 
 // --- Template types ---
@@ -286,7 +287,7 @@ export function TemplatesView({ workspaceId }: { workspaceId: string }) {
     setCreating(template.id);
 
     try {
-      const res = await fetch("/api/v1/flows", {
+      const res = await fetch(withBasePath("/api/v1/flows"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { withBasePath } from "@/lib/client-url";
 
 export default function ChannelCallbackPage() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export default function ChannelCallbackPage() {
       }
 
       try {
-        const res = await fetch("/api/v1/channels/sync", { method: "POST" });
+        const res = await fetch(withBasePath("/api/v1/channels/sync"), { method: "POST" });
         const data = await res.json();
 
         if (!res.ok || data.error) {

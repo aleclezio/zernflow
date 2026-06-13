@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Send, Paperclip, Bot, User, MessageSquare, CheckCircle, Clock, RotateCcw, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/client-url";
 import { PlatformIcon } from "@/components/platform-icon";
 import type { Database, ConversationStatus } from "@/lib/types/database";
 
@@ -230,7 +231,7 @@ export function MessageThread({
     setMessages((prev) => [...prev, optimisticMessage]);
 
     try {
-      const res = await fetch("/api/v1/messages", {
+      const res = await fetch(withBasePath("/api/v1/messages"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ conversationId: conversation.id, text }),
