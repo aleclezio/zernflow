@@ -103,15 +103,23 @@ ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS last_assigned_member_index INT N
 
 -- ── RPCs for atomic ref link click tracking ─────────────────────────────────
 
+-- SECURITY DEFINER with no workspace check (by id only) — same hardening as the
+-- increment_* RPCs in 00013_tenant_lockdown: pin search_path and revoke from
+-- public/anon/authenticated so ONLY trusted server code (service role, e.g. the
+-- /r/[slug] public-redirect route) can call them. Otherwise any anon caller could
+-- inflate another workspace's counters via PostgREST /rpc, RLS bypassed.
 CREATE OR REPLACE FUNCTION increment_ref_link_clicks(link_id UUID)
 RETURNS void AS $$
   UPDATE ref_links SET clicks = clicks + 1 WHERE id = link_id;
-$$ LANGUAGE sql SECURITY DEFINER;
+$$ LANGUAGE sql SECURITY DEFINER SET search_path = public;
 
 CREATE OR REPLACE FUNCTION increment_ref_link_conversions(link_id UUID)
 RETURNS void AS $$
   UPDATE ref_links SET conversions = conversions + 1 WHERE id = link_id;
-$$ LANGUAGE sql SECURITY DEFINER;
+$$ LANGUAGE sql SECURITY DEFINER SET search_path = public;
+
+REVOKE EXECUTE ON FUNCTION increment_ref_link_clicks(uuid)      FROM public, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION increment_ref_link_conversions(uuid) FROM public, anon, authenticated;
 
 -- ── API Keys (external developer authentication) ────────────────────────────
 
@@ -177,7 +185,9 @@ CREATE TABLE IF NOT EXISTS webhook_endpoints (
   url TEXT NOT NULL,
   name TEXT NOT NULL,
   events TEXT[] NOT NULL DEFAULT '{}',
-  secret TEXT,
+  -- Signing secret stored ENCRYPTED (key-custody invariant): the Phase-3
+  -- webhook-dispatcher must write/read this via lib/workspace-keys.ts, never plaintext.
+  secret_encrypted TEXT,
   is_active BOOLEAN NOT NULL DEFAULT true,
   last_triggered_at TIMESTAMPTZ,
   failure_count INT NOT NULL DEFAULT 0,

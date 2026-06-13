@@ -38,6 +38,23 @@ beforeEach(() => {
   cookieJar = {};
 });
 
+// Give an existing user a SECOND workspace bound to a distinct Zernio profile,
+// so cookie-driven active-workspace resolution is actually discriminating
+// (a single-workspace user can't prove the cookie changed anything).
+async function addSecondWorkspace(userId: string, ownWorkspaceId: string) {
+  const svc = serviceClient();
+  const p1 = `prof-${crypto.randomUUID()}`;
+  const p2 = `prof-${crypto.randomUUID()}`;
+  await svc.from("workspaces").update({ zernio_profile_id: p1 }).eq("id", ownWorkspaceId);
+  const { data: ws2 } = await svc
+    .from("workspaces")
+    .insert({ name: "Client Two", slug: `ws2-${crypto.randomUUID().slice(0, 8)}`, zernio_profile_id: p2 })
+    .select("id")
+    .single();
+  await svc.from("workspace_members").insert({ workspace_id: ws2!.id, user_id: userId, role: "owner" });
+  return { p1, p2, ws2Id: ws2!.id };
+}
+
 describe("authenticateRequest — session", () => {
   it("resolves the caller's workspace and identity", async () => {
     const owner = await createTestUser("auth-session");
@@ -51,16 +68,30 @@ describe("authenticateRequest — session", () => {
     expect(result!.userId).toBe(owner.userId);
   });
 
-  it("a forged active_profile_id cookie cannot escalate to a foreign workspace", async () => {
-    const owner = await createTestUser("auth-escalate");
+  it("honors active_profile_id to select the RIGHT workspace among several (agency multi-client)", async () => {
+    const owner = await createTestUser("auth-active");
     currentClient = owner.client;
-    cookieJar["active_profile_id"] = "a-different-tenants-profile-id";
+    const { p2, ws2Id } = await addSecondWorkspace(owner.userId, owner.workspaceId);
+
+    cookieJar["active_profile_id"] = p2; // select the second client
 
     const result = await authenticateRequest(req());
+    // Must be the cookie-selected workspace — NOT an arbitrary/first membership.
+    // (Upstream's .limit(1).single() would ignore the cookie and fail this.)
+    expect(result!.workspaceId).toBe(ws2Id);
+  });
 
-    // resolveWorkspaceId only matches among the caller's OWN memberships, so the
-    // forged cookie is ignored and we fall back to the caller's own workspace.
-    expect(result!.workspaceId).toBe(owner.workspaceId);
+  it("a forged active_profile_id (a profile the caller doesn't own) cannot escalate", async () => {
+    const owner = await createTestUser("auth-escalate");
+    currentClient = owner.client;
+    const { ws2Id } = await addSecondWorkspace(owner.userId, owner.workspaceId);
+
+    cookieJar["active_profile_id"] = `prof-foreign-${crypto.randomUUID()}`;
+
+    const result = await authenticateRequest(req());
+    // resolveWorkspaceId only matches the caller's OWN memberships → falls back to
+    // one of THEIR workspaces, never a foreign one.
+    expect([owner.workspaceId, ws2Id]).toContain(result!.workspaceId);
   });
 
   it("returns null when there is no session", async () => {
