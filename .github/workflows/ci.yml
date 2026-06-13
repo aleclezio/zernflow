@@ -37,7 +37,14 @@ jobs:
           cache: npm
       - uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
         with:
-          version: latest
+          # Pinned, not `latest`: the CLI version transitively pins the local
+          # stack images `supabase start` pulls. v2.106.0 (2026-06-11) changed
+          # the default JWT signing so freshly-minted user tokens fail PostgREST
+          # validation and downgrade to `anon` -> "permission denied for table
+          # workspace_members" in createTestUser. v2.105.0 is the last green
+          # version. Upgrade deliberately (review CI), never implicitly via latest.
+          # Follow-up: adopt v2.106.x's asymmetric JWT signing as reviewed work.
+          version: 2.105.0
       - run: npm ci
       - run: supabase start
       - run: node scripts/dev-env.mjs
