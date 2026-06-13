@@ -888,6 +888,60 @@ export interface Database {
         };
         Relationships: [];
       };
+      saved_replies: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          title: string;
+          content: string;
+          shortcut: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          title: string;
+          content: string;
+          shortcut?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          title?: string;
+          content?: string;
+          shortcut?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      conversation_notes: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          workspace_id: string;
+          user_id: string;
+          content: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          conversation_id: string;
+          workspace_id: string;
+          user_id: string;
+          content: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          content?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: string;
