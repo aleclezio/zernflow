@@ -79,6 +79,14 @@ describe("assign_next_member RPC", () => {
     expect(await counter(A)).toBe(1);
   });
 
+  it("wraps a stale/out-of-range index (robust to team-size changes)", async () => {
+    // Simulates the counter left high after the team shrank: idx beyond member count.
+    await setMode(A, "round-robin", 7); // count is 3
+    const first = await assign(A, randomUUID());
+    expect(first).toBe(memberOrder[7 % memberOrder.length]); // 7 % 3 = 1
+    expect(await counter(A)).toBe((7 + 1) % memberOrder.length); // 8 % 3 = 2
+  });
+
   it("no-ops in manual mode (returns null, counter unchanged)", async () => {
     await setMode(A, "manual", 0);
     expect(await assign(A, randomUUID())).toBeNull();
