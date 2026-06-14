@@ -894,6 +894,45 @@ export interface Database {
         };
         Relationships: [];
       };
+      webhook_endpoints: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          url: string;
+          name: string;
+          events: string[];
+          secret_encrypted: string | null;
+          is_active: boolean;
+          last_triggered_at: string | null;
+          failure_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          url: string;
+          name: string;
+          events?: string[];
+          secret_encrypted?: string | null;
+          is_active?: boolean;
+          last_triggered_at?: string | null;
+          failure_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          url?: string;
+          name?: string;
+          events?: string[];
+          secret_encrypted?: string | null;
+          is_active?: boolean;
+          last_triggered_at?: string | null;
+          failure_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       saved_replies: {
         Row: {
           id: string;
