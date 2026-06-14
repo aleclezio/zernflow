@@ -146,14 +146,14 @@ export async function authorizeApiV1(
 }
 
 /**
- * Guard for the API-KEY MANAGEMENT endpoints (issue/list/revoke/rotate). Unlike
- * authorizeApiV1, this is SESSION-ONLY and owner/admin-gated: an API key must NOT
- * be able to mint, list, or revoke keys (a leaked key could otherwise persist and
- * enumerate siblings). Returns the session client scoped to the caller's active
- * workspace. NOTE: RLS enforces only TENANT isolation here (the api_keys policy is
- * is_workspace_member — member-level); the owner/admin role boundary is enforced at
- * the app layer below, so this guard must wrap every mgmt route. Returns a 401/403
- * response on rejection.
+ * Guard for SESSION-ONLY, owner/admin-gated management endpoints (API keys,
+ * webhook endpoints). Unlike authorizeApiV1, an API key must NOT pass: a leaked
+ * key could otherwise mint/enumerate keys or register data-exfiltration webhooks.
+ * Returns the session client scoped to the caller's active workspace. NOTE: RLS
+ * enforces only TENANT isolation on these tables (their policies are
+ * is_workspace_member — member-level); the owner/admin role boundary is enforced
+ * at the app layer below, so this guard must wrap every such route. Returns a
+ * 401/403 response on rejection.
  */
 export async function requireWorkspaceAdmin(
   request: NextRequest
@@ -165,7 +165,10 @@ export async function requireWorkspaceAdmin(
   if (auth.authMethod === "api_key" || !auth.userId) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "API keys cannot manage API keys" }, { status: 403 }),
+      response: NextResponse.json(
+        { error: "API keys cannot manage workspace resources" },
+        { status: 403 }
+      ),
     };
   }
   const supabase = await createClient();
