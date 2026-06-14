@@ -1,15 +1,23 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/types/database";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveWorkspaceId } from "@/lib/workspace-resolve";
 import { PROFILE_COOKIE, WORKSPACE_COOKIE } from "@/lib/workspace";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { isApiKeyExpired } from "@/lib/api-key";
 
 export interface AuthResult {
   workspaceId: string;
   userId: string | null; // null for API-key auth (no user identity)
   authMethod: "session" | "api_key";
 }
+
+// Per-workspace API-key request budget. In-memory + single-node (see lib/rate-limit.ts).
+const API_KEY_RATE_LIMIT = 120;
+const API_KEY_RATE_WINDOW_MS = 60_000;
 
 /**
  * Authenticate a /api/v1 request via Supabase session cookie OR an API key.
@@ -73,11 +81,12 @@ async function authenticateApiKey(apiKey: string): Promise<AuthResult | null> {
 
   const { data: key } = await supabase
     .from("api_keys")
-    .select("workspace_id")
+    .select("workspace_id, expires_at")
     .eq("key_hash", hash)
     .maybeSingle();
 
   if (!key) return null;
+  if (isApiKeyExpired(key.expires_at, Date.now())) return null;
 
   // Best-effort last-used stamp; never blocks or fails the request.
   void supabase
@@ -94,4 +103,45 @@ async function authenticateApiKey(apiKey: string): Promise<AuthResult | null> {
     userId: null,
     authMethod: "api_key",
   };
+}
+
+export type ApiV1Authorized = {
+  ok: true;
+  auth: AuthResult;
+  supabase: SupabaseClient<Database>;
+};
+export type ApiV1Rejected = { ok: false; response: NextResponse };
+
+/**
+ * One-stop guard for /api/v1 endpoints. Authenticates (session or API key),
+ * rate-limits API-key traffic (429), and returns the correctly-scoped Supabase
+ * client: the SERVICE client for API-key auth (no session → RLS keys off a null
+ * auth.uid(), so the session client would return zero rows), the session client
+ * otherwise. API-key requests therefore rely on each endpoint's own explicit
+ * .eq("workspace_id", auth.workspaceId) scoping, since the service client
+ * bypasses RLS.
+ */
+export async function authorizeApiV1(
+  request: NextRequest
+): Promise<ApiV1Authorized | ApiV1Rejected> {
+  const auth = await authenticateRequest(request);
+  if (!auth) {
+    return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  if (auth.authMethod === "api_key") {
+    const allowed = checkRateLimit(
+      `apiv1:${auth.workspaceId}`,
+      API_KEY_RATE_LIMIT,
+      API_KEY_RATE_WINDOW_MS
+    );
+    if (!allowed) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 }),
+      };
+    }
+  }
+  const supabase =
+    auth.authMethod === "api_key" ? await createServiceClient() : await createClient();
+  return { ok: true, auth, supabase };
 }

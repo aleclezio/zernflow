@@ -1367,3 +1367,9 @@ CREATE TRIGGER set_webhook_endpoints_updated_at BEFORE UPDATE ON webhook_endpoin
 -- ============================================================
 -- AI intent recognition toggle (opt-in per workspace; default off).
 ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS ai_intent_enabled BOOLEAN NOT NULL DEFAULT false;
+
+-- ============================================================
+-- 00017_api_key_expiry.sql
+-- ============================================================
+-- API key expiry (NULL = never expires; past = rejected as 401).
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;

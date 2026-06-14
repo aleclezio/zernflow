@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api-auth";
+import { authorizeApiV1 } from "@/lib/api-auth";
 
 /**
  * GET /api/v1/flows/:flowId/analytics?from=&to=
@@ -12,10 +11,10 @@ export async function GET(
   { params }: { params: Promise<{ flowId: string }> }
 ) {
   const { flowId } = await params;
-  const auth = await authenticateRequest(request);
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const supabase = await createClient();
   const { data: flow } = await supabase
     .from("flows")
     .select("id")
@@ -31,6 +30,7 @@ export async function GET(
   let query = supabase
     .from("analytics_events")
     .select("metadata")
+    .eq("workspace_id", auth.workspaceId)
     .eq("flow_id", flowId)
     .eq("event_type", "node_executed");
   if (fromDate) query = query.gte("created_at", fromDate);
@@ -54,6 +54,7 @@ export async function GET(
     let q = supabase
       .from("analytics_events")
       .select("id", { count: "exact", head: true })
+      .eq("workspace_id", auth.workspaceId)
       .eq("flow_id", flowId)
       .eq("event_type", eventType);
     if (fromDate) q = q.gte("created_at", fromDate);

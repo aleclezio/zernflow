@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api-auth";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/types/database";
+import { authorizeApiV1 } from "@/lib/api-auth";
 
 async function assertConversation(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: SupabaseClient<Database>,
   conversationId: string,
   workspaceId: string
 ) {
@@ -22,10 +23,10 @@ export async function GET(
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
   const { conversationId } = await params;
-  const auth = await authenticateRequest(request);
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const supabase = await createClient();
   if (!(await assertConversation(supabase, conversationId, auth.workspaceId)))
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
 
@@ -45,11 +46,11 @@ export async function POST(
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
   const { conversationId } = await params;
-  const auth = await authenticateRequest(request);
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
   if (!auth.userId) return NextResponse.json({ error: "Notes require a user session" }, { status: 403 });
 
-  const supabase = await createClient();
   if (!(await assertConversation(supabase, conversationId, auth.workspaceId)))
     return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
 

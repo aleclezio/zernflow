@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api-auth";
+import { authorizeApiV1 } from "@/lib/api-auth";
 
 /**
  * GET /api/v1/contacts/:contactId/export
@@ -13,10 +12,10 @@ export async function GET(
   { params }: { params: Promise<{ contactId: string }> }
 ) {
   const { contactId } = await params;
-  const auth = await authenticateRequest(request);
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const supabase = await createClient();
   const { data: contact } = await supabase
     .from("contacts")
     .select("*")
