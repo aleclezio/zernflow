@@ -1,10 +1,26 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./helpers";
+import { seedConversation, seedSavedReply } from "./seed";
 
-// Notes & saved-replies live inside the inbox conversation view, which needs a
-// seeded conversation. This smoke asserts the inbox itself loads authenticated;
-// note/saved-reply CRUD is deferred to a comprehensive pass with seeded data.
-test("inbox loads for an authenticated user", async ({ page }) => {
+test("inbox: add a note and insert a saved reply", async ({ page, authedUser }) => {
+  const contactName = `E2E Contact ${Date.now()}`;
+  await seedConversation(authedUser.workspaceId, contactName);
+  await seedSavedReply(authedUser.workspaceId, "E2E Greeting", "Hello from a saved reply");
+
   await page.goto("/dashboard/inbox");
-  await expect(page).toHaveURL(/\/inbox/);
-  await expect(page.locator("#email")).toHaveCount(0);
+  // Open the seeded conversation (each list row is a button labelled by contact).
+  await page.locator("button").filter({ hasText: contactName }).click();
+
+  // NOTES (right contact panel)
+  const noteInput = page.getByPlaceholder(/Add an internal note/);
+  await expect(noteInput).toBeVisible();
+  const noteText = `E2E note ${Date.now()}`;
+  await noteInput.fill(noteText);
+  await page.getByRole("button", { name: "Add note" }).click();
+  await expect(page.getByText(noteText)).toBeVisible();
+
+  // SAVED REPLIES (composer picker)
+  await page.getByRole("button", { name: "Saved replies" }).click();
+  await expect(page.getByText("E2E Greeting")).toBeVisible();
+  await page.getByText("E2E Greeting").click();
+  await expect(page.getByPlaceholder("Type a message...")).toHaveValue(/Hello from a saved reply/);
 });
