@@ -30,6 +30,7 @@ export async function GET(
   let query = supabase
     .from("analytics_events")
     .select("metadata")
+    .eq("workspace_id", auth.workspaceId)
     .eq("flow_id", flowId)
     .eq("event_type", "node_executed");
   if (fromDate) query = query.gte("created_at", fromDate);
@@ -53,6 +54,7 @@ export async function GET(
     let q = supabase
       .from("analytics_events")
       .select("id", { count: "exact", head: true })
+      .eq("workspace_id", auth.workspaceId)
       .eq("flow_id", flowId)
       .eq("event_type", eventType);
     if (fromDate) q = q.gte("created_at", fromDate);
