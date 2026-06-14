@@ -2,6 +2,7 @@ import { getWorkspace } from "@/lib/workspace";
 import Link from "next/link";
 import { GitBranch, Sparkles, Plug } from "lucide-react";
 import { CreateFlowButton } from "@/components/create-flow-button";
+import { ImportFlowButton } from "@/components/import-flow-button";
 import type { FlowStatus } from "@/lib/types/database";
 
 const statusConfig: Record<FlowStatus, { label: string; classes: string }> = {
@@ -66,6 +67,7 @@ export default async function FlowsPage() {
               <Sparkles className="h-4 w-4" />
               Templates
             </Link>
+            <ImportFlowButton />
             <CreateFlowButton />
           </div>
         </div>
