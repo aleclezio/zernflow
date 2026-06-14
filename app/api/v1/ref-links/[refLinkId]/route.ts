@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api-auth";
+import { authorizeApiV1 } from "@/lib/api-auth";
 
 /** GET /api/v1/ref-links/:refLinkId — one ref link (workspace-scoped), with flow name/status. */
 export async function GET(
@@ -8,10 +7,10 @@ export async function GET(
   { params }: { params: Promise<{ refLinkId: string }> }
 ) {
   const { refLinkId } = await params;
-  const auth = await authenticateRequest(request);
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const supabase = await createClient();
   const { data, error } = await supabase
     .from("ref_links")
     .select("*, flows(name, status)")
@@ -29,8 +28,9 @@ export async function PUT(
   { params }: { params: Promise<{ refLinkId: string }> }
 ) {
   const { refLinkId } = await params;
-  const auth = await authenticateRequest(request);
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
   const body = await request.json().catch(() => ({}));
   const { name, flowId, channelId, is_active } = body ?? {};
@@ -49,7 +49,6 @@ export async function PUT(
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
   }
 
-  const supabase = await createClient();
 
   // Re-pointed flow/channel must also belong to the caller's workspace.
   if (updates.flow_id) {
@@ -89,10 +88,10 @@ export async function DELETE(
   { params }: { params: Promise<{ refLinkId: string }> }
 ) {
   const { refLinkId } = await params;
-  const auth = await authenticateRequest(request);
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const supabase = await createClient();
   const { error } = await supabase
     .from("ref_links")
     .delete()

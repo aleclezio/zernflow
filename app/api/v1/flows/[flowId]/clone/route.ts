@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api-auth";
+import { authorizeApiV1 } from "@/lib/api-auth";
 
 /**
  * POST /api/v1/flows/:flowId/clone
@@ -12,10 +11,10 @@ export async function POST(
   { params }: { params: Promise<{ flowId: string }> }
 ) {
   const { flowId } = await params;
-  const auth = await authenticateRequest(request);
-  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const supabase = await createClient();
   const { data: source } = await supabase
     .from("flows")
     .select("*")
