@@ -309,6 +309,21 @@ async function processEvent(
         preview: messagePreview,
       })
       .then(() => {});
+  } else {
+    // Brand-new conversation: assign it to the next team member if the workspace
+    // has round-robin enabled. The RPC is atomic (locks the workspace counter row)
+    // and no-ops in manual mode. Best-effort — a failure must never drop the
+    // inbound message (a 500 here would make Zernio retry against the committed
+    // dedupe row, which no-ops, dropping the event).
+    try {
+      const { error: assignErr } = await supabase.rpc("assign_next_member", {
+        p_workspace_id: channel.workspace_id,
+        p_conversation_id: conversation.id,
+      });
+      if (assignErr) console.error("auto-assign failed:", assignErr.message);
+    } catch (err) {
+      console.error("auto-assign failed:", err instanceof Error ? err.message : "unknown");
+    }
   }
 
   // Messages are stored by Zernio (source of truth) — no local insert needed.

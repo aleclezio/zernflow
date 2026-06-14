@@ -29,6 +29,7 @@ interface WorkspaceSettings {
   hasApiKey: boolean;
   hasAiKey: boolean;
   aiIntentEnabled: boolean;
+  autoAssignMode: string;
   globalKeywords: string[];
 }
 
@@ -57,6 +58,7 @@ export function SettingsView({
   const [aiKey, setAiKey] = useState("");
   const [showAiKey, setShowAiKey] = useState(false);
   const [aiIntentEnabled, setAiIntentEnabled] = useState(workspace.aiIntentEnabled);
+  const [roundRobin, setRoundRobin] = useState(workspace.autoAssignMode === "round-robin");
   const [keywords, setKeywords] = useState<string[]>(workspace.globalKeywords);
   const [newKeyword, setNewKeyword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -154,6 +156,7 @@ export function SettingsView({
         apiKey: apiKey.trim() || undefined,
         aiKey: aiKey.trim() || undefined,
         aiIntentEnabled,
+        autoAssignMode: roundRobin ? "round-robin" : "manual",
       });
 
       if (result?.error) {
@@ -421,6 +424,31 @@ export function SettingsView({
                   When a message matches no keyword trigger, use the AI Gateway to route it to the
                   closest keyword flow. Runs one model call per unmatched message, so it&apos;s off by
                   default and needs an AI Gateway key.
+                </span>
+              </span>
+            </label>
+          </section>
+
+          <hr className="border-border" />
+
+          {/* Inbox auto-assignment */}
+          <section>
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Inbox auto-assignment</h2>
+            </div>
+            <label className="mt-3 flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 p-3">
+              <input
+                type="checkbox"
+                checked={roundRobin}
+                onChange={(e) => setRoundRobin(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span className="text-xs">
+                <span className="font-medium">Round-robin assignment</span>
+                <span className="block text-muted-foreground">
+                  When a brand-new contact starts a conversation, assign it to the next team member in
+                  rotation. Off (manual) leaves new conversations unassigned.
                 </span>
               </span>
             </label>
