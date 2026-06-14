@@ -13,6 +13,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ImportContactsButton } from "@/components/contacts/import-contacts-button";
 import {
   SegmentBuilder,
   createEmptyFilter,
@@ -96,6 +97,7 @@ export function ContactsView({
               {contacts.length} contact{contacts.length !== 1 ? "s" : ""} in your workspace
             </p>
           </div>
+          <ImportContactsButton />
         </div>
 
         {/* Search and filters */}

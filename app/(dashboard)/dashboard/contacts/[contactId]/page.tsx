@@ -10,6 +10,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { PlatformIcon } from "@/components/platform-icon";
+import { ExportContactButton } from "@/components/contacts/export-contact-button";
 
 export default async function ContactDetailPage({
   params,
@@ -115,6 +116,9 @@ export default async function ContactDetailPage({
                 </span>
               )}
             </div>
+          </div>
+          <div className="ml-auto">
+            <ExportContactButton contactId={contactId} />
           </div>
         </div>
 
