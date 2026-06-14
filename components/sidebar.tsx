@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import {
   ArrowLeft,
+  Home,
   GitBranch,
   MessageSquare,
   Users,
@@ -35,6 +36,7 @@ interface WorkspaceItem {
 }
 
 const navigation = [
+  { name: "Home", href: "/dashboard", icon: Home },
   { name: "Flows", href: "/dashboard/flows", icon: GitBranch },
   { name: "Inbox", href: "/dashboard/inbox", icon: MessageSquare },
   { name: "Contacts", href: "/dashboard/contacts", icon: Users },
@@ -95,7 +97,12 @@ export function Sidebar({
 
       <nav className="flex-1 space-y-1 p-3">
         {navigation.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          // "/dashboard" (Home) needs an exact match — startsWith would mark it
+          // active on every nested route since they all begin with /dashboard.
+          const isActive =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname.startsWith(item.href);
           return (
             <Link
               key={item.name}
