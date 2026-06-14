@@ -13,18 +13,20 @@ const MAX_IMPORT_BYTES = 2 * 1024 * 1024; // 2 MB
 export function ImportFlowButton() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const pendingRef = useRef(false);
   const [importing, setImporting] = useState(false);
 
   async function handleFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-picking the same file after a failed attempt
-    if (!file) return;
+    if (!file || pendingRef.current) return;
 
     if (file.size > MAX_IMPORT_BYTES) {
       alert("That file is too large to import (max 2 MB).");
       return;
     }
 
+    pendingRef.current = true;
     setImporting(true);
     try {
       const parsed = parseFlowExport(await file.text());
@@ -51,6 +53,7 @@ export function ImportFlowButton() {
       console.error("Failed to import flow:", err);
       alert("Failed to import flow. Please try again.");
     } finally {
+      pendingRef.current = false;
       setImporting(false);
     }
   }

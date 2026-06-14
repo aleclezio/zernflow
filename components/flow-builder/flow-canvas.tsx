@@ -261,7 +261,10 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
     }
   }, [saveFlow, flow.id]);
 
+  const clonePendingRef = useRef(false);
   const handleClone = useCallback(async () => {
+    if (clonePendingRef.current) return;
+    clonePendingRef.current = true;
     setCloning(true);
     try {
       const res = await fetch(withBasePath(`/api/v1/flows/${flow.id}/clone`), {
@@ -275,6 +278,7 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
       const cloned = await res.json();
       router.push(`/dashboard/flows/${cloned.id}`);
     } finally {
+      clonePendingRef.current = false;
       setCloning(false);
     }
   }, [flow.id, router]);
@@ -282,6 +286,9 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
+      // Persist the current canvas first (like Publish) so the export reflects
+      // what's on screen and the filename matches the saved name.
+      await saveFlow();
       const res = await fetch(withBasePath(`/api/v1/flows/${flow.id}/export`));
       if (!res.ok) {
         setSaveError("Failed to export");
@@ -292,14 +299,13 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      // Use the persisted name so the filename matches the server export body.
-      a.download = flowExportFilename(flow.name);
+      a.download = flowExportFilename(flowName);
       a.click();
       URL.revokeObjectURL(url);
     } finally {
       setExporting(false);
     }
-  }, [flow.id, flow.name]);
+  }, [saveFlow, flow.id, flowName]);
 
   return (
     <div className="flex h-full flex-col">
