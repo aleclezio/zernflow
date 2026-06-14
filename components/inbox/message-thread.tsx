@@ -191,7 +191,7 @@ export function MessageThread({
         async () => {
           try {
             const res = await fetch(
-              `/api/v1/messages?conversationId=${conversation.id}`
+              withBasePath(`/api/v1/messages?conversationId=${conversation.id}`)
             );
             if (res.ok) {
               const freshMessages = await res.json();
