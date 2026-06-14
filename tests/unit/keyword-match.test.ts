@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { messageKeywordMatches } from "@/lib/flow-engine/keyword-match";
+import { messageKeywordMatches, messageHitsExcludeKeywords } from "@/lib/flow-engine/keyword-match";
 
 describe("messageKeywordMatches", () => {
   it("matches by contains (default)", () => {
@@ -31,5 +31,20 @@ describe("messageKeywordMatches", () => {
     expect(messageKeywordMatches({ keywords: ["x"] }, "")).toBe(false);
     expect(messageKeywordMatches({ keywords: [] }, "anything")).toBe(false);
     expect(messageKeywordMatches({}, "anything")).toBe(false);
+  });
+});
+
+describe("messageHitsExcludeKeywords", () => {
+  it("is true when the message contains an exclude term (case-insensitive)", () => {
+    expect(messageHitsExcludeKeywords({ keywords: ["price"], excludeKeywords: ["free"] }, "is it FREE?")).toBe(true);
+  });
+
+  it("is false when no exclude term is present", () => {
+    expect(messageHitsExcludeKeywords({ keywords: ["price"], excludeKeywords: ["free"] }, "what is the price?")).toBe(false);
+  });
+
+  it("is false when there are no exclude keywords or the text is empty", () => {
+    expect(messageHitsExcludeKeywords({ keywords: ["price"] }, "free stuff")).toBe(false);
+    expect(messageHitsExcludeKeywords({ excludeKeywords: ["free"] }, "   ")).toBe(false);
   });
 });
