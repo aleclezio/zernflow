@@ -9,6 +9,11 @@
  *   customer-authored — a URL resolving to a private/reserved address is rejected and counted
  *   as a failed delivery (so a misconfigured/hostile endpoint auto-disables);
  * - never logs the secret, signature, payload, or customer URL.
+ *
+ * The failure counter is read-modify-write on a snapshot (not an atomic SQL
+ * increment), so concurrent deliveries to the same failing endpoint can lose a
+ * strike. Acceptable for the single-node, fire-and-forget deploy: the only effect
+ * is auto-disable triggering a delivery or two late, never early.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database";

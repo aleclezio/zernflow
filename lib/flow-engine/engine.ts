@@ -122,13 +122,6 @@ export async function executeFlow(
     metadata: { triggerId: context.triggerId },
   });
 
-  // Fire-and-forget: notify outbound webhooks about the flow start.
-  void dispatchWebhookEvent(context.workspaceId, "flow.started", {
-    flowId: context.flowId,
-    contactId: context.contactId,
-    channelId: context.channelId,
-  });
-
   // Find the trigger node (entry point)
   const triggerNode = nodes.find((n) => n.type === "trigger");
   if (!triggerNode) return;
@@ -139,6 +132,15 @@ export async function executeFlow(
 
   const startNode = nodes.find((n) => n.id === firstEdge.target);
   if (!startNode) return;
+
+  // Fire-and-forget: notify outbound webhooks about the flow start. Placed after
+  // the trigger/edge/start-node guards so it fires only when the flow actually
+  // begins executing — never an orphaned flow.started with no flow.completed.
+  void dispatchWebhookEvent(context.workspaceId, "flow.started", {
+    flowId: context.flowId,
+    contactId: context.contactId,
+    channelId: context.channelId,
+  });
 
   await traverseNodes(supabase, session.id, startNode, nodes, edges, context, 0);
 }

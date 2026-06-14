@@ -10,7 +10,8 @@ const SELECT_PUBLIC =
 /**
  * PUT /api/v1/webhook-endpoints/:endpointId — update url/name/events/is_active and/or
  * the signing secret. `secret: null | ""` clears it (deliveries become unsigned);
- * a non-empty string replaces it.
+ * a non-empty string replaces it. Unlike POST, a supplied secret is NOT echoed back
+ * (the caller already holds it) — there is no rotate-and-reveal on update.
  */
 export async function PUT(
   request: NextRequest,
