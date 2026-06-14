@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "./helpers";
+import type { Page } from "@playwright/test";
 
 // The workspace Name input has no associated label/placeholder — scope it to the
 // General section so the round-robin save (which requires a non-empty name) works.
@@ -10,7 +11,8 @@ function workspaceNameInput(page: Page) {
     .first();
 }
 
-test("round-robin assignment toggle persists", async ({ page }) => {
+test("round-robin assignment toggle persists", async ({ page, authedUser }) => {
+  expect(authedUser.workspaceId).toBeTruthy();
   await page.goto("/dashboard/settings");
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
 
@@ -32,7 +34,8 @@ test("round-robin assignment toggle persists", async ({ page }) => {
   ).toBeChecked();
 });
 
-test("AI intent recognition toggle responds", async ({ page }) => {
+test("AI intent recognition toggle responds", async ({ page, authedUser }) => {
+  expect(authedUser.workspaceId).toBeTruthy();
   await page.goto("/dashboard/settings");
   const toggle = page
     .locator("label")
