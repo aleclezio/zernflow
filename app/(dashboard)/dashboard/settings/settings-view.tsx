@@ -530,6 +530,27 @@ export function SettingsView({
 
           <hr className="border-border" />
 
+          {/* API Keys */}
+          <section>
+            <div className="flex items-center gap-2">
+              <Key className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">API Keys</h2>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Programmatic access to the v1 API (owner/admin only). Issue, rotate, and revoke keys.
+            </p>
+            <Link
+              href="/dashboard/settings/api-keys"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              <Key className="h-4 w-4" />
+              Manage API Keys
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            </Link>
+          </section>
+
+          <hr className="border-border" />
+
           {/* Save button */}
           <div className="flex items-center gap-3">
             <button
