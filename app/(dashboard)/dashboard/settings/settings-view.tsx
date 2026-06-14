@@ -27,6 +27,7 @@ interface WorkspaceSettings {
   name: string;
   hasApiKey: boolean;
   hasAiKey: boolean;
+  aiIntentEnabled: boolean;
   globalKeywords: string[];
 }
 
@@ -54,6 +55,7 @@ export function SettingsView({
   const [showApiKey, setShowApiKey] = useState(false);
   const [aiKey, setAiKey] = useState("");
   const [showAiKey, setShowAiKey] = useState(false);
+  const [aiIntentEnabled, setAiIntentEnabled] = useState(workspace.aiIntentEnabled);
   const [keywords, setKeywords] = useState<string[]>(workspace.globalKeywords);
   const [newKeyword, setNewKeyword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -150,6 +152,7 @@ export function SettingsView({
         // Only update keys if user entered new ones
         apiKey: apiKey.trim() || undefined,
         aiKey: aiKey.trim() || undefined,
+        aiIntentEnabled,
       });
 
       if (result?.error) {
@@ -402,6 +405,24 @@ export function SettingsView({
                 AI Gateway key configured
               </p>
             )}
+
+            {/* AI intent recognition — opt-in (fires an LLM call per unmatched message) */}
+            <label className="mt-4 flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 p-3">
+              <input
+                type="checkbox"
+                checked={aiIntentEnabled}
+                onChange={(e) => setAiIntentEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span className="text-xs">
+                <span className="font-medium">AI intent recognition</span>
+                <span className="block text-muted-foreground">
+                  When a message matches no keyword trigger, use the AI Gateway to route it to the
+                  closest keyword flow. Runs one model call per unmatched message, so it&apos;s off by
+                  default and needs an AI Gateway key.
+                </span>
+              </span>
+            </label>
           </section>
 
           <hr className="border-border" />

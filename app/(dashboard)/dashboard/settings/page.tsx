@@ -13,6 +13,7 @@ export default async function SettingsPage() {
         name: workspace.name,
         hasApiKey,
         hasAiKey,
+        aiIntentEnabled: workspace.ai_intent_enabled,
         globalKeywords: (workspace.global_keywords as string[]) ?? [],
       }}
     />

@@ -1,6 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { generateText, createGateway } from "ai";
 import type { Database } from "@/lib/types/database";
 import { messageKeywordMatches, type MessageKeywordConfig } from "@/lib/flow-engine/keyword-match";
+import { getAiKey } from "@/lib/workspace-keys";
+import {
+  buildIntentList,
+  parseIntentIndex,
+  INTENT_CLASSIFIER_SYSTEM_PROMPT,
+} from "@/lib/flow-engine/ai-intent";
+
+// Cheap, fast model for one-token intent classification, addressed through the
+// AI Gateway (same key custody as the AI-response node).
+const INTENT_MODEL = "openai/gpt-4o-mini";
 
 interface IncomingMessage {
   text?: string;
@@ -73,7 +84,83 @@ export async function matchTrigger(
     if (welcomeTrigger) return welcomeTrigger;
   }
 
+  // 4.5. AI intent recognition (opt-in per workspace). If no keyword matched and
+  // the workspace enabled it, ask the model to classify the message against the
+  // keyword-trigger intents so semantically similar messages still route correctly
+  // (e.g. "what's the cost?" → a "pricing" keyword). Best-effort: any failure falls
+  // through to the default trigger below.
+  if (message.text) {
+    const keywordTriggers = triggers.filter((t) => t.type === "keyword" && t.config);
+    if (keywordTriggers.length > 0) {
+      const aiMatch = await matchByAiIntent(supabase, keywordTriggers, message.text, channelId);
+      if (aiMatch) return aiMatch;
+    }
+  }
+
   // 5. Default trigger
   const defaultTrigger = triggers.find((t) => t.type === "default");
   return defaultTrigger || null;
+}
+
+/**
+ * Use the AI Gateway to classify an incoming message against the keyword
+ * triggers, returning the matched trigger or null. Best-effort and gated:
+ *
+ *  - opt-in only: the workspace must set `ai_intent_enabled` (a shared AI key
+ *    configured for AI-response nodes must NOT silently start per-message
+ *    intent billing);
+ *  - key custody: the gateway key is read via `getAiKey` (decrypted, fail-closed),
+ *    never a raw column select and never the platform env fallback — intent
+ *    matching stays strictly per-workspace;
+ *  - never blocks message processing: no key, a failed/timed-out (5s) call, or an
+ *    invalid index all return null so the matcher falls through to the default.
+ *
+ * Never logs key material or the request URL.
+ */
+async function matchByAiIntent(
+  supabase: SupabaseClient<Database>,
+  keywordTriggers: Trigger[],
+  messageText: string,
+  channelId: string
+): Promise<Trigger | null> {
+  // Resolve the message's OWN workspace from its channel (no cross-tenant path).
+  const { data: channel } = await supabase
+    .from("channels")
+    .select("workspace_id")
+    .eq("id", channelId)
+    .maybeSingle();
+  if (!channel) return null;
+
+  // Cheapest gate first: the opt-in toggle, before any key decrypt or network.
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("ai_intent_enabled")
+    .eq("id", channel.workspace_id)
+    .maybeSingle();
+  if (!workspace?.ai_intent_enabled) return null;
+
+  const aiKey = await getAiKey(supabase, channel.workspace_id);
+  if (!aiKey) return null;
+
+  try {
+    const gateway = createGateway({ apiKey: aiKey });
+    const { text } = await generateText({
+      model: gateway(INTENT_MODEL),
+      system: INTENT_CLASSIFIER_SYSTEM_PROMPT,
+      prompt: `Message: "${messageText}"\n\nIntents:\n${buildIntentList(keywordTriggers)}`,
+      temperature: 0,
+      maxOutputTokens: 10,
+      abortSignal: AbortSignal.timeout(5000),
+    });
+
+    const index = parseIntentIndex(text, keywordTriggers.length);
+    return index === null ? null : keywordTriggers[index];
+  } catch (error) {
+    // Best-effort — never block message processing. Log the message only, never the key/URL.
+    console.error(
+      "AI intent matching failed:",
+      error instanceof Error ? error.message : "unknown error"
+    );
+    return null;
+  }
 }
