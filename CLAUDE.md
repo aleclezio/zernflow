@@ -14,6 +14,7 @@ npm run typecheck           # tsc --noEmit
 npm test                    # full vitest suite (unit + integration)
 npm run test:unit           # pure unit tests only
 npm run test:integration    # against the LOCAL supabase stack
+npm run test:e2e            # Playwright e2e (build first; needs local supabase + `npx playwright install chromium`)
 bash scripts/check-key-access.sh   # CI guard: key-column access
 node scripts/smoke-test.mjs        # live e2e vs a running app
 ```
