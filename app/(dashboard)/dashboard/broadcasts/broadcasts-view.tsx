@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/client-url";
 import { createClient } from "@/lib/supabase/client";
 import {
   SegmentBuilder,
@@ -388,7 +389,7 @@ function BroadcastDetail({
     setSuccess(null);
 
     try {
-      const res = await fetch(`/api/v1/broadcasts/${broadcast.id}/send`, {
+      const res = await fetch(withBasePath(`/api/v1/broadcasts/${broadcast.id}/send`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

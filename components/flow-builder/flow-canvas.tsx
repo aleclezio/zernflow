@@ -21,6 +21,7 @@ import { useCallback, useRef, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, Rocket, Loader2, History, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/client-url";
 import { createClient } from "@/lib/supabase/client";
 import type { Database, FlowStatus, Json } from "@/lib/types/database";
 
@@ -240,7 +241,7 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
       // First save the current state
       await saveFlow();
       // Then call the publish API which increments version and saves snapshot
-      const res = await fetch(`/api/v1/flows/${flow.id}/publish`, {
+      const res = await fetch(withBasePath(`/api/v1/flows/${flow.id}/publish`), {
         method: "POST",
       });
       if (!res.ok) {
