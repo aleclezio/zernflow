@@ -87,6 +87,8 @@ export interface Database {
           webhook_secret_encrypted: string | null;
           zernio_webhook_id: string | null;
           global_keywords: Json | null;
+          auto_assign_mode: string;
+          last_assigned_member_index: number;
           created_at: string;
           updated_at: string;
         };
@@ -104,6 +106,8 @@ export interface Database {
           webhook_secret_encrypted?: string | null;
           zernio_webhook_id?: string | null;
           global_keywords?: Json | null;
+          auto_assign_mode?: string;
+          last_assigned_member_index?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -121,6 +125,8 @@ export interface Database {
           webhook_secret_encrypted?: string | null;
           zernio_webhook_id?: string | null;
           global_keywords?: Json | null;
+          auto_assign_mode?: string;
+          last_assigned_member_index?: number;
           updated_at?: string;
         };
         Relationships: [];
@@ -1359,6 +1365,13 @@ export interface Database {
           link_id: string;
         };
         Returns: undefined;
+      };
+      assign_next_member: {
+        Args: {
+          p_workspace_id: string;
+          p_conversation_id: string;
+        };
+        Returns: string | null;
       };
     };
     Enums: {
