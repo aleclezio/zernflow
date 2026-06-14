@@ -10,6 +10,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database";
+import type { WebhookEventType } from "@/lib/webhook-events";
 import { decryptSecret, encryptSecret, isEncrypted } from "@/lib/crypto";
 
 type KeyColumn = "late_api_key_encrypted" | "ai_api_key";
@@ -129,6 +130,92 @@ export async function setWebhookCredentials(
       zernio_webhook_id: creds.zernioWebhookId,
     })
     .eq("id", workspaceId)
+    .select("id")
+    .single();
+  return { error: error ? error.message : null };
+}
+
+/** A webhook endpoint with its signing secret already decrypted, for the dispatcher. */
+export interface WebhookEndpointForDispatch {
+  id: string;
+  url: string;
+  failureCount: number;
+  secret: string | null;
+}
+
+/**
+ * Active webhook endpoints for `workspaceId` that subscribe to `event`, with the
+ * per-endpoint signing secret already decrypted (fail-closed: a bad ciphertext
+ * yields a null secret = unsigned delivery, never a throw). Confines
+ * webhook_endpoints.secret_encrypted reads to this module per the custody invariant.
+ */
+export async function getActiveWebhookEndpoints(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  event: WebhookEventType
+): Promise<WebhookEndpointForDispatch[]> {
+  const { data } = await supabase
+    .from("webhook_endpoints")
+    .select("id, url, failure_count, secret_encrypted")
+    .eq("workspace_id", workspaceId)
+    .eq("is_active", true)
+    .contains("events", [event]);
+
+  if (!data) return [];
+
+  return data.map((row) => {
+    let secret: string | null = null;
+    if (row.secret_encrypted && isEncrypted(row.secret_encrypted)) {
+      try {
+        secret = decryptSecret(row.secret_encrypted, workspaceId);
+      } catch {
+        console.error(`workspace-keys: failed to decrypt webhook endpoint secret for ${row.id}`);
+      }
+    }
+    return { id: row.id, url: row.url, failureCount: row.failure_count, secret };
+  });
+}
+
+/** Decrypted signing secret for one endpoint (fail-closed), or null if unsigned/foreign. */
+export async function getWebhookEndpointSecret(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  endpointId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("webhook_endpoints")
+    .select("secret_encrypted")
+    .eq("id", endpointId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  if (!data || !data.secret_encrypted || !isEncrypted(data.secret_encrypted)) return null;
+  try {
+    return decryptSecret(data.secret_encrypted, workspaceId);
+  } catch {
+    console.error(`workspace-keys: failed to decrypt webhook endpoint secret for ${endpointId}`);
+    return null;
+  }
+}
+
+/**
+ * Set (plaintext) or clear (null) the per-endpoint signing secret. Encrypt-on-write,
+ * AAD = workspace id; scoped by id + workspace_id. Returns an error string if the
+ * row doesn't exist or the write fails.
+ */
+export async function setWebhookEndpointSecret(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  endpointId: string,
+  plaintext: string | null
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from("webhook_endpoints")
+    .update({
+      secret_encrypted: plaintext === null ? null : encryptSecret(plaintext, workspaceId),
+    })
+    .eq("id", endpointId)
+    .eq("workspace_id", workspaceId)
     .select("id")
     .single();
   return { error: error ? error.message : null };

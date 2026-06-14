@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# CI guard: the per-workspace secret columns (late_api_key_encrypted, ai_api_key)
+# CI guard: the secret columns (workspace-level: late_api_key_encrypted,
+# ai_api_key, webhook_secret_encrypted; per-endpoint: webhook_endpoints.secret_encrypted)
 # may only be referenced from lib/workspace-keys.ts (the single accessor that
 # enforces encrypt-on-write / decrypt-and-fail-closed-on-read) and the generated
-# database types. Any other reference is a custody regression.
+# database types. Any other reference is a custody regression. (`secret_encrypted`
+# also subsumes the `webhook_secret_encrypted` column name.)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-violations=$(grep -rn --include='*.ts' --include='*.tsx' -E 'late_api_key_encrypted|ai_api_key|webhook_secret_encrypted' app components lib \
+violations=$(grep -rn --include='*.ts' --include='*.tsx' -E 'late_api_key_encrypted|ai_api_key|secret_encrypted' app components lib \
   | grep -v '^lib/workspace-keys.ts:' \
   | grep -v '^lib/types/database.ts:' || true)
 
