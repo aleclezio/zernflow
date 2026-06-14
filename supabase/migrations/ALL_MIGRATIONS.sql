@@ -1361,3 +1361,9 @@ CREATE POLICY "Users can manage webhook_endpoints in their workspaces"
 
 CREATE TRIGGER set_webhook_endpoints_updated_at BEFORE UPDATE ON webhook_endpoints
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ============================================================
+-- 00016_ai_intent_toggle.sql
+-- ============================================================
+-- AI intent recognition toggle (opt-in per workspace; default off).
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS ai_intent_enabled BOOLEAN NOT NULL DEFAULT false;

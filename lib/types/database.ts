@@ -80,6 +80,7 @@ export interface Database {
           late_api_key_encrypted: string | null;
           ai_api_key: string | null;
           ai_provider: string;
+          ai_intent_enabled: boolean;
           zernio_profile_id: string | null;
           zernio_profile_name: string | null;
           webhook_token_hash: string | null;
@@ -96,6 +97,7 @@ export interface Database {
           late_api_key_encrypted?: string | null;
           ai_api_key?: string | null;
           ai_provider?: string;
+          ai_intent_enabled?: boolean;
           zernio_profile_id?: string | null;
           zernio_profile_name?: string | null;
           webhook_token_hash?: string | null;
@@ -112,6 +114,7 @@ export interface Database {
           late_api_key_encrypted?: string | null;
           ai_api_key?: string | null;
           ai_provider?: string;
+          ai_intent_enabled?: boolean;
           zernio_profile_id?: string | null;
           zernio_profile_name?: string | null;
           webhook_token_hash?: string | null;
