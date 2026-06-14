@@ -15,15 +15,24 @@ vi.mock("ai", () => ({
 
 import { matchTrigger } from "@/lib/flow-engine/trigger-matcher";
 
-const message = { text: "how much will this run me" }; // matches no keyword
+interface KeywordSpec {
+  keywords: Array<string | { value: string }>;
+  excludeKeywords?: string[];
+}
 
 /**
- * Build a published flow with two keyword triggers (pricing=index 0 via higher
- * priority, support=index 1), a default trigger to fall through to, and a
- * conversation with one inbound non-matching message (no welcome trigger → the
- * AI-intent step is reached).
+ * Build a published flow with the given keyword triggers (all equal priority, so
+ * the AI index→trigger mapping must rely on the matcher's stable id-sort, not on
+ * priority), a default trigger to fall through to, and a conversation with one
+ * inbound message (no welcome trigger → the AI-intent step is reached).
  */
-async function rig(label: string) {
+async function rig(
+  label: string,
+  opts: { keywords?: KeywordSpec[]; text?: string } = {}
+) {
+  const keywords = opts.keywords ?? [{ keywords: ["pricing"] }, { keywords: ["support"] }];
+  const text = opts.text ?? "how much will this run me"; // matches no keyword
+
   const owner = await createTestUser(`ai-${label}`);
   const svc = serviceClient();
 
@@ -44,25 +53,22 @@ async function rig(label: string) {
     .select("id")
     .single();
 
-  const mkTrigger = (type: TriggerInsert["type"], config: TriggerInsert["config"], priority: number) =>
+  const mkTrigger = (type: TriggerInsert["type"], config: TriggerInsert["config"]) =>
     svc
       .from("triggers")
-      .insert({
-        flow_id: flow!.id,
-        channel_id: channel!.id,
-        type,
-        config,
-        is_active: true,
-        priority,
-      })
+      .insert({ flow_id: flow!.id, channel_id: channel!.id, type, config, is_active: true, priority: 10 })
       .select("id")
       .single();
 
-  // Distinct priorities make the keyword-trigger order (and thus the AI index)
-  // deterministic: pricing=0, support=1.
-  const { data: pricing } = await mkTrigger("keyword", { keywords: ["pricing"] }, 20);
-  const { data: support } = await mkTrigger("keyword", { keywords: ["support"] }, 10);
-  const { data: def } = await mkTrigger("default", {}, 0);
+  const keywordIds: string[] = [];
+  for (const spec of keywords) {
+    const { data } = await mkTrigger("keyword", {
+      keywords: spec.keywords,
+      ...(spec.excludeKeywords ? { excludeKeywords: spec.excludeKeywords } : {}),
+    });
+    keywordIds.push(data!.id);
+  }
+  const { data: def } = await mkTrigger("default", {});
 
   const { data: contact } = await svc
     .from("contacts")
@@ -81,20 +87,23 @@ async function rig(label: string) {
     .select("id")
     .single();
 
-  await svc
-    .from("messages")
-    .insert({ conversation_id: conv!.id, direction: "inbound", text: message.text });
+  await svc.from("messages").insert({ conversation_id: conv!.id, direction: "inbound", text });
 
   return {
     workspaceId: owner.workspaceId,
     channelId: channel!.id,
     conversationId: conv!.id,
-    triggers: { pricing: pricing!.id, support: support!.id, default: def!.id },
+    keywordIds, // in insertion order
+    defaultId: def!.id,
+    text,
   };
 }
 
 const enableIntent = (workspaceId: string) =>
   serviceClient().from("workspaces").update({ ai_intent_enabled: true }).eq("id", workspaceId);
+
+const run = (r: { channelId: string; conversationId: string; text: string }, text?: string) =>
+  matchTrigger(serviceClient(), r.channelId, r.conversationId, { text: text ?? r.text });
 
 beforeEach(() => {
   generateTextMock.mockReset();
@@ -105,32 +114,45 @@ describe("matchTrigger — AI intent recognition", () => {
     const r = await rig("toggle-off");
     await setAiKey(serviceClient(), r.workspaceId, "gw-test-key"); // key set, toggle stays default-false
 
-    const trigger = await matchTrigger(serviceClient(), r.channelId, r.conversationId, message);
+    const trigger = await run(r);
 
     expect(generateTextMock).not.toHaveBeenCalled();
-    expect(trigger?.id).toBe(r.triggers.default);
+    expect(trigger?.id).toBe(r.defaultId);
   });
 
   it("does NOT call the model when enabled but no AI key is configured", async () => {
     const r = await rig("no-key");
     await enableIntent(r.workspaceId); // toggle on, but no key
 
-    const trigger = await matchTrigger(serviceClient(), r.channelId, r.conversationId, message);
+    const trigger = await run(r);
 
     expect(generateTextMock).not.toHaveBeenCalled();
-    expect(trigger?.id).toBe(r.triggers.default);
+    expect(trigger?.id).toBe(r.defaultId);
   });
 
-  it("routes to the AI-selected keyword trigger when enabled with a key", async () => {
+  it("maps the model index to the keyword trigger in stable id-sorted order", async () => {
     const r = await rig("match");
     await setAiKey(serviceClient(), r.workspaceId, "gw-test-key");
     await enableIntent(r.workspaceId);
-    generateTextMock.mockResolvedValue({ text: "0" }); // → pricing (index 0)
+    const sorted = [...r.keywordIds].sort(); // matcher sorts candidates by id
+    generateTextMock.mockResolvedValue({ text: "0" });
 
-    const trigger = await matchTrigger(serviceClient(), r.channelId, r.conversationId, message);
+    const t0 = await run(r);
 
     expect(generateTextMock).toHaveBeenCalledTimes(1);
-    expect(trigger?.id).toBe(r.triggers.pricing);
+    expect(t0?.id).toBe(sorted[0]);
+  });
+
+  it("maps index 1 to the second id-sorted trigger", async () => {
+    const r = await rig("match-1");
+    await setAiKey(serviceClient(), r.workspaceId, "gw-test-key");
+    await enableIntent(r.workspaceId);
+    const sorted = [...r.keywordIds].sort();
+    generateTextMock.mockResolvedValue({ text: "1" });
+
+    const t1 = await run(r);
+
+    expect(t1?.id).toBe(sorted[1]);
   });
 
   it("falls through to default when the model returns the no-match sentinel", async () => {
@@ -139,10 +161,10 @@ describe("matchTrigger — AI intent recognition", () => {
     await enableIntent(r.workspaceId);
     generateTextMock.mockResolvedValue({ text: "-1" });
 
-    const trigger = await matchTrigger(serviceClient(), r.channelId, r.conversationId, message);
+    const trigger = await run(r);
 
     expect(generateTextMock).toHaveBeenCalledTimes(1);
-    expect(trigger?.id).toBe(r.triggers.default);
+    expect(trigger?.id).toBe(r.defaultId);
   });
 
   it("falls through to default when the model call throws (best-effort)", async () => {
@@ -151,9 +173,37 @@ describe("matchTrigger — AI intent recognition", () => {
     await enableIntent(r.workspaceId);
     generateTextMock.mockRejectedValue(new Error("gateway down"));
 
-    const trigger = await matchTrigger(serviceClient(), r.channelId, r.conversationId, message);
+    const trigger = await run(r);
 
     expect(generateTextMock).toHaveBeenCalledTimes(1);
-    expect(trigger?.id).toBe(r.triggers.default);
+    expect(trigger?.id).toBe(r.defaultId);
+  });
+
+  it("excludes an excludeKeywords-disqualified trigger from the AI candidate set", async () => {
+    // "pricing" excludes "free"; the message hits the exclude and matches no keyword,
+    // so only "support" is a candidate → index 0 must be support, never pricing.
+    const r = await rig("exclude", {
+      keywords: [{ keywords: ["pricing"], excludeKeywords: ["free"] }, { keywords: ["support"] }],
+      text: "is this thing free",
+    });
+    await setAiKey(serviceClient(), r.workspaceId, "gw-test-key");
+    await enableIntent(r.workspaceId);
+    generateTextMock.mockResolvedValue({ text: "0" });
+
+    const trigger = await run(r);
+
+    expect(trigger?.id).toBe(r.keywordIds[1]); // support
+    expect(trigger?.id).not.toBe(r.keywordIds[0]); // pricing was filtered out
+  });
+
+  it("does NOT call the model for a whitespace-only message", async () => {
+    const r = await rig("whitespace", { text: "   " });
+    await setAiKey(serviceClient(), r.workspaceId, "gw-test-key");
+    await enableIntent(r.workspaceId);
+
+    const trigger = await run(r, "   ");
+
+    expect(generateTextMock).not.toHaveBeenCalled();
+    expect(trigger?.id).toBe(r.defaultId);
   });
 });

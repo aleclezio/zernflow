@@ -58,4 +58,10 @@ describe("parseIntentIndex", () => {
     expect(parseIntentIndex("none", 3)).toBeNull();
     expect(parseIntentIndex("foo 1", 3)).toBeNull();
   });
+
+  it("is best-effort lenient on a leading number with trailing text", () => {
+    // The model is told to reply with only the number; parseInt tolerates a stray
+    // suffix and still routes rather than dropping the match.
+    expect(parseIntentIndex("1 (pricing)", 3)).toBe(1);
+  });
 });

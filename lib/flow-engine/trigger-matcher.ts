@@ -1,7 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateText, createGateway } from "ai";
 import type { Database } from "@/lib/types/database";
-import { messageKeywordMatches, type MessageKeywordConfig } from "@/lib/flow-engine/keyword-match";
+import {
+  messageKeywordMatches,
+  messageHitsExcludeKeywords,
+  type MessageKeywordConfig,
+} from "@/lib/flow-engine/keyword-match";
 import { getAiKey } from "@/lib/workspace-keys";
 import {
   buildIntentList,
@@ -89,10 +93,19 @@ export async function matchTrigger(
   // keyword-trigger intents so semantically similar messages still route correctly
   // (e.g. "what's the cost?" → a "pricing" keyword). Best-effort: any failure falls
   // through to the default trigger below.
-  if (message.text) {
-    const keywordTriggers = triggers.filter((t) => t.type === "keyword" && t.config);
+  const aiText = message.text?.trim();
+  if (aiText) {
+    const keywordTriggers = triggers
+      .filter((t) => t.type === "keyword" && t.config)
+      // Honor excludeKeywords across both layers: a trigger the user suppressed for
+      // this message must not be re-offered to the classifier.
+      .filter((t) => !messageHitsExcludeKeywords(t.config as MessageKeywordConfig, aiText))
+      // Stable order so the model's numeric index maps to the same trigger every
+      // time (the priority sort has no tiebreaker, so equal priorities are otherwise
+      // non-deterministic).
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     if (keywordTriggers.length > 0) {
-      const aiMatch = await matchByAiIntent(supabase, keywordTriggers, message.text, channelId);
+      const aiMatch = await matchByAiIntent(supabase, keywordTriggers, aiText, channelId);
       if (aiMatch) return aiMatch;
     }
   }

@@ -31,8 +31,14 @@ export function messageKeywordMatches(config: MessageKeywordConfig, text: string
   }
   if (!hit) return false;
 
-  const excluded = (config.excludeKeywords ?? []).some(
+  return !messageHitsExcludeKeywords(config, normalized);
+}
+
+/** True if `text` contains any of the config's excludeKeywords (case-insensitive). */
+export function messageHitsExcludeKeywords(config: MessageKeywordConfig, text: string): boolean {
+  const normalized = (text || "").toLowerCase().trim();
+  if (!normalized) return false;
+  return (config.excludeKeywords ?? []).some(
     (ek) => ek && normalized.includes(ek.toLowerCase())
   );
-  return !excluded;
 }
