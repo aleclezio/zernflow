@@ -7,6 +7,7 @@ import { pickSignatureHeader, resolveEventId, sha256Hex, verifySignature } from 
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logSecurityEvent } from "@/lib/security-events";
 import { matchCommentTrigger, type CommentTrigger } from "@/lib/flow-engine/comment-matcher";
+import { dispatchWebhookEvent } from "@/lib/webhook-dispatcher";
 
 /**
  * POST /api/webhooks/zernio/[token]
@@ -264,6 +265,14 @@ async function processEvent(
       contact_id: contactId,
       event_type: "contact_created",
     });
+
+    // Fire-and-forget: notify outbound webhooks about the new contact (must not
+    // delay the 200 owed to Zernio — a slow ack would trigger its retry).
+    void dispatchWebhookEvent(channel.workspace_id, "contact.created", {
+      contactId,
+      displayName: senderName,
+      platform: channel.platform,
+    });
   }
 
   // ── Upsert conversation ──────────────────────────────────────────────────
@@ -303,6 +312,14 @@ async function processEvent(
   }
 
   // Messages are stored by Zernio (source of truth) — no local insert needed.
+
+  // Fire-and-forget: notify outbound webhooks about the received message.
+  void dispatchWebhookEvent(channel.workspace_id, "message.received", {
+    contactId,
+    conversationId: conversation.id,
+    text: msg.text || null,
+    platform: channel.platform,
+  });
 
   // ── Flow engine ───────────────────────────────────────────────────────────
 

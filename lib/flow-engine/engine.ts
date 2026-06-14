@@ -26,6 +26,7 @@ import { resolvePrivateReplyIds } from "./comment-matcher";
 import { pickVariant } from "./pick-variant";
 import { interpolateVariables } from "./interpolate";
 import { loadBotFieldVars } from "./bot-fields";
+import { dispatchWebhookEvent } from "@/lib/webhook-dispatcher";
 
 export async function executeFlow(
   supabase: SupabaseClient<Database>,
@@ -119,6 +120,13 @@ export async function executeFlow(
     contact_id: context.contactId,
     event_type: "flow_started",
     metadata: { triggerId: context.triggerId },
+  });
+
+  // Fire-and-forget: notify outbound webhooks about the flow start.
+  void dispatchWebhookEvent(context.workspaceId, "flow.started", {
+    flowId: context.flowId,
+    contactId: context.contactId,
+    channelId: context.channelId,
   });
 
   // Find the trigger node (entry point)
@@ -436,6 +444,13 @@ async function executeSendMessage(
         contact_id: context.contactId,
         event_type: "message_sent",
       });
+
+      // Fire-and-forget: notify outbound webhooks about the sent message.
+      void dispatchWebhookEvent(context.workspaceId, "message.sent", {
+        contactId: context.contactId,
+        conversationId: context.conversationId,
+        text,
+      });
     } catch (error) {
       console.error("Failed to send message:", error);
       await supabase.from("messages").insert({
@@ -606,12 +621,26 @@ async function executeTag(
       .from("contact_tags")
       .upsert({ contact_id: context.contactId, tag_id: tag.id })
       .select();
+
+    // Fire-and-forget: notify outbound webhooks about the tag addition.
+    void dispatchWebhookEvent(context.workspaceId, "tag.added", {
+      contactId: context.contactId,
+      tagId: tag.id,
+      tagName: data.tagName,
+    });
   } else {
     await supabase
       .from("contact_tags")
       .delete()
       .eq("contact_id", context.contactId)
       .eq("tag_id", tag.id);
+
+    // Fire-and-forget: notify outbound webhooks about the tag removal.
+    void dispatchWebhookEvent(context.workspaceId, "tag.removed", {
+      contactId: context.contactId,
+      tagId: tag.id,
+      tagName: data.tagName,
+    });
   }
 }
 
@@ -882,6 +911,13 @@ async function completeSession(
         flow_id: session.flow_id,
         contact_id: session.contact_id,
         event_type: "flow_completed",
+      });
+
+      // Fire-and-forget: notify outbound webhooks about the flow completion.
+      void dispatchWebhookEvent(flow.workspace_id, "flow.completed", {
+        flowId: session.flow_id,
+        contactId: session.contact_id,
+        channelId: session.channel_id,
       });
     }
   }
