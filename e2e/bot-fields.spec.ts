@@ -16,9 +16,14 @@ test("bot field lifecycle: create, edit value, delete", async ({ page, authedUse
   await expect(page.getByText(slug)).toBeVisible();
 
   // EDIT value (fresh workspace → exactly one row → one textbox), then reload to
-  // prove persistence.
+  // prove persistence. Wait for the PUT to resolve before reloading, else the
+  // reload can race the save and read the stale value.
   await page.getByRole("textbox").fill("v2");
+  const saved = page.waitForResponse(
+    (r) => r.url().includes("/api/v1/bot-fields/") && r.request().method() === "PUT" && r.ok(),
+  );
   await page.getByRole("button", { name: "Save" }).click();
+  await saved;
   await page.reload();
   await expect(page.getByRole("textbox")).toHaveValue("v2");
 
