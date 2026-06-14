@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/database";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveWorkspaceId } from "@/lib/workspace-resolve";
 import { PROFILE_COOKIE, WORKSPACE_COOKIE } from "@/lib/workspace";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { isApiKeyExpired } from "@/lib/api-key";
+import { hashApiKey, isApiKeyExpired } from "@/lib/api-key";
 
 export interface AuthResult {
   workspaceId: string;
@@ -76,7 +75,7 @@ async function authenticateSession(): Promise<AuthResult | null> {
 async function authenticateApiKey(apiKey: string): Promise<AuthResult | null> {
   if (!apiKey.startsWith("zf_")) return null;
 
-  const hash = crypto.createHash("sha256").update(apiKey).digest("hex");
+  const hash = hashApiKey(apiKey);
   const supabase = await createServiceClient();
 
   const { data: key } = await supabase
@@ -143,5 +142,41 @@ export async function authorizeApiV1(
   }
   const supabase =
     auth.authMethod === "api_key" ? await createServiceClient() : await createClient();
+  return { ok: true, auth, supabase };
+}
+
+/**
+ * Guard for the API-KEY MANAGEMENT endpoints (issue/list/revoke/rotate). Unlike
+ * authorizeApiV1, this is SESSION-ONLY and owner/admin-gated: an API key must NOT
+ * be able to mint, list, or revoke keys (a leaked key could otherwise persist and
+ * enumerate siblings). Returns the session client scoped to the caller's active
+ * workspace (RLS-enforced), or a 401/403 response.
+ */
+export async function requireWorkspaceAdmin(
+  request: NextRequest
+): Promise<ApiV1Authorized | ApiV1Rejected> {
+  const auth = await authenticateRequest(request);
+  if (!auth) {
+    return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+  }
+  if (auth.authMethod === "api_key" || !auth.userId) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "API keys cannot manage API keys" }, { status: 403 }),
+    };
+  }
+  const supabase = await createClient();
+  const { data: membership } = await supabase
+    .from("workspace_members")
+    .select("role")
+    .eq("workspace_id", auth.workspaceId)
+    .eq("user_id", auth.userId)
+    .maybeSingle();
+  if (!membership || (membership.role !== "owner" && membership.role !== "admin")) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Owner or admin role required" }, { status: 403 }),
+    };
+  }
   return { ok: true, auth, supabase };
 }
