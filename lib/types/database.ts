@@ -872,6 +872,7 @@ export interface Database {
           key_hash: string;
           key_prefix: string;
           last_used_at: string | null;
+          expires_at: string | null;
           created_by: string | null;
           created_at: string;
         };
@@ -882,12 +883,14 @@ export interface Database {
           key_hash: string;
           key_prefix: string;
           last_used_at?: string | null;
+          expires_at?: string | null;
           created_by?: string | null;
           created_at?: string;
         };
         Update: {
           name?: string;
           last_used_at?: string | null;
+          expires_at?: string | null;
         };
         Relationships: [];
       };
