@@ -21,10 +21,10 @@ import { POST as rotatePOST } from "@/app/api/v1/api-keys/[keyId]/rotate/route";
 import { GET as savedRepliesGET } from "@/app/api/v1/saved-replies/route";
 import { _resetRateLimits } from "@/lib/rate-limit";
 
-const jsonReq = (body: unknown) =>
+const jsonReq = (body: unknown, headers: Record<string, string> = {}) =>
   new NextRequest("http://localhost/api/v1/api-keys", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
 const plainReq = (headers: Record<string, string> = {}) =>
@@ -121,9 +121,9 @@ describe("/api/v1/api-keys — management", () => {
 
   it("an API key cannot manage API keys (403)", async () => {
     const { key } = await issueKey("self");
-    // No session → Bearer api-key path → requireWorkspaceAdmin rejects.
+    // Bearer api-key path → requireWorkspaceAdmin rejects both list AND issue with 403.
     expect((await listGET(plainReq({ authorization: `Bearer ${key}` }))).status).toBe(403);
-    expect((await issuePOST(jsonReq({ name: "x" }))).status).not.toBe(201); // (no session → 401)
+    expect((await issuePOST(jsonReq({ name: "x" }, { authorization: `Bearer ${key}` }))).status).toBe(403);
   });
 
   it("a non-admin member cannot manage API keys (403)", async () => {

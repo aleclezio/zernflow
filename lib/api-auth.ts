@@ -150,7 +150,10 @@ export async function authorizeApiV1(
  * authorizeApiV1, this is SESSION-ONLY and owner/admin-gated: an API key must NOT
  * be able to mint, list, or revoke keys (a leaked key could otherwise persist and
  * enumerate siblings). Returns the session client scoped to the caller's active
- * workspace (RLS-enforced), or a 401/403 response.
+ * workspace. NOTE: RLS enforces only TENANT isolation here (the api_keys policy is
+ * is_workspace_member — member-level); the owner/admin role boundary is enforced at
+ * the app layer below, so this guard must wrap every mgmt route. Returns a 401/403
+ * response on rejection.
  */
 export async function requireWorkspaceAdmin(
   request: NextRequest

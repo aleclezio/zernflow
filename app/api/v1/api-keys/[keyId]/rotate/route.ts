@@ -20,9 +20,11 @@ export async function POST(
   const { auth, supabase } = gate;
 
   const body = await request.json().catch(() => ({}));
-  const update: { key_hash: string; key_prefix: string; expires_at?: string | null } = {
+  // Reset last_used_at: the new secret has never been used (the row id is reused).
+  const update: { key_hash: string; key_prefix: string; last_used_at: null; expires_at?: string | null } = {
     key_hash: "",
     key_prefix: "",
+    last_used_at: null,
   };
   if (body?.expiresAt !== undefined) {
     if (body.expiresAt === null || body.expiresAt === "") {
