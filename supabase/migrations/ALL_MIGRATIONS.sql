@@ -1373,3 +1373,65 @@ ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS ai_intent_enabled BOOLEAN NOT NU
 -- ============================================================
 -- API key expiry (NULL = never expires; past = rejected as 401).
 ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+-- ============================================================
+-- 00018_round_robin_assign.sql
+-- ============================================================
+-- Atomic round-robin inbox assignment. Picks the next workspace member under a
+-- FOR UPDATE lock on the workspaces counter row (no SELECT-then-UPDATE race),
+-- assigns the brand-new conversation, advances the counter. No-ops unless
+-- auto_assign_mode = 'round-robin'. Service-role only (revoked from anon/authenticated).
+create or replace function assign_next_member(p_workspace_id uuid, p_conversation_id uuid)
+returns uuid as $$
+declare
+  v_idx int;
+  v_mode text;
+  v_count int;
+  v_pick int;
+  v_assignee uuid;
+begin
+  select last_assigned_member_index, auto_assign_mode
+    into v_idx, v_mode
+  from workspaces
+  where id = p_workspace_id
+  for update;
+
+  if not found or v_mode is distinct from 'round-robin' then
+    return null;
+  end if;
+
+  select count(*) into v_count
+  from workspace_members
+  where workspace_id = p_workspace_id;
+
+  if v_count = 0 then
+    return null;
+  end if;
+
+  v_pick := v_idx % v_count;
+
+  select user_id into v_assignee
+  from workspace_members
+  where workspace_id = p_workspace_id
+  order by created_at asc, user_id asc
+  offset v_pick
+  limit 1;
+
+  if v_assignee is null then
+    return null;
+  end if;
+
+  update conversations
+  set assigned_to = v_assignee
+  where id = p_conversation_id
+    and workspace_id = p_workspace_id;
+
+  update workspaces
+  set last_assigned_member_index = (v_idx + 1) % v_count
+  where id = p_workspace_id;
+
+  return v_assignee;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+revoke execute on function assign_next_member(uuid, uuid) from public, anon, authenticated;
