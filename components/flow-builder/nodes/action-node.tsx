@@ -14,6 +14,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NodeAnalyticsBadge } from "../node-analytics-badge";
 import type { NodeType } from "@/lib/types/database";
 
 export interface ActionNodeProps {
@@ -141,7 +142,7 @@ export function getSummary(nodeData: ActionNodeProps): string | null {
   }
 }
 
-export function ActionNode({ data, selected }: NodeProps) {
+export function ActionNode({ id, data, selected }: NodeProps) {
   const nodeData = data as ActionNodeProps;
   const actionType = nodeData.actionType || "addTag";
   const config = actionConfig[actionType] || {
@@ -159,10 +160,11 @@ export function ActionNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        "w-56 rounded-lg border bg-card shadow-sm transition-shadow",
+        "relative w-56 rounded-lg border bg-card shadow-sm transition-shadow",
         selected ? "border-gray-400 shadow-md" : "border-border"
       )}
     >
+      <NodeAnalyticsBadge nodeId={id} />
       <Handle
         type="target"
         position={Position.Top}

@@ -19,7 +19,7 @@ import "@xyflow/react/dist/style.css";
 
 import { useCallback, useRef, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Rocket, Loader2, History, Play, Copy, Download } from "lucide-react";
+import { ArrowLeft, Save, Rocket, Loader2, History, Play, Copy, Download, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { withBasePath } from "@/lib/client-url";
 import { flowExportFilename } from "@/lib/flow-export";
@@ -36,6 +36,7 @@ import { AiResponseNode } from "./nodes/AiResponseNode";
 import { NodeConfigSidebar } from "./panels/NodeConfigSidebar";
 import { VersionHistoryPanel } from "./panels/VersionHistoryPanel";
 import { TestPanel } from "./panels/TestPanel";
+import { FlowAnalyticsProvider, useFlowAnalytics } from "./analytics-context";
 
 type Flow = Database["public"]["Tables"]["flows"]["Row"];
 
@@ -81,6 +82,12 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
   const supabase = createClient();
+  const {
+    showAnalytics,
+    setShowAnalytics,
+    fetchAnalytics,
+    loading: analyticsLoading,
+  } = useFlowAnalytics();
 
   const initialNodes: Node[] = Array.isArray(flow.nodes)
     ? (flow.nodes as unknown as Node[])
@@ -307,6 +314,12 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
     }
   }, [saveFlow, flow.id, flowName]);
 
+  const handleToggleAnalytics = useCallback(() => {
+    const next = !showAnalytics;
+    setShowAnalytics(next);
+    if (next) fetchAnalytics(flow.id);
+  }, [showAnalytics, setShowAnalytics, fetchAnalytics, flow.id]);
+
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
@@ -387,6 +400,22 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
           >
             <History className="h-3.5 w-3.5" />
             History
+          </button>
+          <button
+            onClick={handleToggleAnalytics}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+              showAnalytics
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-background hover:bg-accent"
+            )}
+          >
+            {analyticsLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <BarChart3 className="h-3.5 w-3.5" />
+            )}
+            Analytics
           </button>
           <button
             onClick={handleClone}
@@ -506,7 +535,9 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
 export function FlowCanvas({ flow }: FlowCanvasProps) {
   return (
     <ReactFlowProvider>
-      <FlowCanvasInner flow={flow} />
+      <FlowAnalyticsProvider>
+        <FlowCanvasInner flow={flow} />
+      </FlowAnalyticsProvider>
     </ReactFlowProvider>
   );
 }
