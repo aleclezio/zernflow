@@ -131,8 +131,13 @@ export async function seedConversation(
  * Insert an API key for a workspace and return the RAW `zf_` secret.
  * Mirrors lib/api-key.ts: the stored hash is sha256(raw) (hex). Lets e2e drive
  * the real Bearer-auth HTTP path without scraping the shown-once UI value.
+ * `scopes` is optional — omit it to get a full-access key (DB default).
  */
-export async function seedApiKey(workspaceId: string, createdBy: string): Promise<string> {
+export async function seedApiKey(
+  workspaceId: string,
+  createdBy: string,
+  scopes?: string[],
+): Promise<string> {
   const raw = `zf_${randomUUID().replace(/-/g, "")}${randomUUID().replace(/-/g, "")}`;
   const { error } = await serviceClient().from("api_keys").insert({
     workspace_id: workspaceId,
@@ -140,6 +145,7 @@ export async function seedApiKey(workspaceId: string, createdBy: string): Promis
     key_hash: createHash("sha256").update(raw).digest("hex"),
     key_prefix: raw.slice(0, 12) + "...",
     created_by: createdBy,
+    ...(scopes ? { scopes } : {}),
   });
   if (error) throw new Error(`seedApiKey failed: ${error.message}`);
   return raw;

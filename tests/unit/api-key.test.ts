@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { createHash } from "node:crypto";
-import { isApiKeyExpired, generateApiKey, hashApiKey, keyPrefix } from "@/lib/api-key";
+import {
+  isApiKeyExpired,
+  generateApiKey,
+  hashApiKey,
+  keyPrefix,
+  isApiScope,
+  parseScopes,
+  hasScope,
+} from "@/lib/api-key";
 
 const NOW = Date.parse("2026-06-14T12:00:00.000Z");
 
@@ -57,5 +65,48 @@ describe("keyPrefix", () => {
     const raw = "zf_0123456789abcdef";
     expect(keyPrefix(raw)).toBe("zf_012345678...");
     expect(keyPrefix(raw).length).toBeLessThan(raw.length);
+  });
+});
+
+describe("isApiScope", () => {
+  it("accepts the three known scopes", () => {
+    expect(isApiScope("read")).toBe(true);
+    expect(isApiScope("write")).toBe(true);
+    expect(isApiScope("send")).toBe(true);
+  });
+  it("rejects unknown / non-string values", () => {
+    expect(isApiScope("admin")).toBe(false);
+    expect(isApiScope("")).toBe(false);
+    expect(isApiScope(123)).toBe(false);
+    expect(isApiScope(null)).toBe(false);
+  });
+});
+
+describe("parseScopes", () => {
+  it("accepts a valid subset and normalises to read,write,send order", () => {
+    expect(parseScopes(["send", "read"])).toEqual(["read", "send"]);
+    expect(parseScopes(["write"])).toEqual(["write"]);
+  });
+  it("dedupes", () => {
+    expect(parseScopes(["read", "read", "write"])).toEqual(["read", "write"]);
+  });
+  it("returns null for an unknown scope, empty array, or non-array", () => {
+    expect(parseScopes(["read", "admin"])).toBeNull();
+    expect(parseScopes([])).toBeNull();
+    expect(parseScopes("read")).toBeNull();
+    expect(parseScopes(null)).toBeNull();
+  });
+});
+
+describe("hasScope", () => {
+  it("treats null/undefined scopes as full access (pre-scopes keys)", () => {
+    expect(hasScope(null, "send")).toBe(true);
+    expect(hasScope(undefined, "write")).toBe(true);
+  });
+  it("grants only the scopes the key holds", () => {
+    expect(hasScope(["read"], "read")).toBe(true);
+    expect(hasScope(["read"], "write")).toBe(false);
+    expect(hasScope(["read"], "send")).toBe(false);
+    expect(hasScope(["read", "write", "send"], "send")).toBe(true);
   });
 });

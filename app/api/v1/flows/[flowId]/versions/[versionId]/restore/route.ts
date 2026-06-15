@@ -6,7 +6,7 @@ export async function POST(
   { params }: { params: Promise<{ flowId: string; versionId: string }> }
 ) {
   const { flowId, versionId } = await params;
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "write");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 

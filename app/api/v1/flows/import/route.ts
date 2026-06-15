@@ -15,7 +15,7 @@ interface ImportedTrigger {
  * imported inactive and without a channel (the user re-assigns). Active-workspace scoped.
  */
 export async function POST(request: NextRequest) {
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "write");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 

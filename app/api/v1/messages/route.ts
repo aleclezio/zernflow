@@ -9,7 +9,7 @@ import { getZernioKey } from "@/lib/workspace-keys";
  * Fetches messages from the Zernio API (source of truth) instead of a local mirror.
  */
 export async function GET(request: NextRequest) {
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "read");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
  * Sends a message via Zernio API. No local message storage — Zernio is the source of truth.
  */
 export async function POST(request: NextRequest) {
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "send");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 

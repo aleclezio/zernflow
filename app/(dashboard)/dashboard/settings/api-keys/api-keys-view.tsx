@@ -8,7 +8,7 @@ import type { Database } from "@/lib/types/database";
 
 type ApiKey = Pick<
   Database["public"]["Tables"]["api_keys"]["Row"],
-  "id" | "name" | "key_prefix" | "last_used_at" | "expires_at" | "created_at"
+  "id" | "name" | "key_prefix" | "scopes" | "last_used_at" | "expires_at" | "created_at"
 >;
 
 export function ApiKeysView({ initialKeys }: { initialKeys: ApiKey[] }) {
@@ -16,6 +16,11 @@ export function ApiKeysView({ initialKeys }: { initialKeys: ApiKey[] }) {
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
+  // Per-key scopes. Default least-privilege (read-only). Picking write also turns
+  // on read (a writer needs to read); send is independent.
+  const [scopeRead, setScopeRead] = useState(true);
+  const [scopeWrite, setScopeWrite] = useState(false);
+  const [scopeSend, setScopeSend] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,15 +33,26 @@ export function ApiKeysView({ initialKeys }: { initialKeys: ApiKey[] }) {
     return rest;
   }
 
+  const scopes = [
+    ...(scopeRead ? ["read"] : []),
+    ...(scopeWrite ? ["write"] : []),
+    ...(scopeSend ? ["send"] : []),
+  ];
+
+  function toggleWrite(checked: boolean) {
+    setScopeWrite(checked);
+    if (checked) setScopeRead(true); // a writer needs read access
+  }
+
   async function createKey() {
-    if (!name.trim() || busy) return;
+    if (!name.trim() || busy || scopes.length === 0) return;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch(withBasePath("/api/v1/api-keys"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), expiresAt: expiresAt || undefined }),
+        body: JSON.stringify({ name: name.trim(), scopes, expiresAt: expiresAt || undefined }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -48,6 +64,9 @@ export function ApiKeysView({ initialKeys }: { initialKeys: ApiKey[] }) {
       setCopied(false);
       setName("");
       setExpiresAt("");
+      setScopeRead(true);
+      setScopeWrite(false);
+      setScopeSend(false);
       setShowCreate(false);
     } finally {
       setBusy(false);
@@ -180,12 +199,52 @@ export function ApiKeysView({ initialKeys }: { initialKeys: ApiKey[] }) {
             </label>
             <button
               onClick={createKey}
-              disabled={!name.trim() || busy}
+              disabled={!name.trim() || busy || scopes.length === 0}
               className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create"}
             </button>
           </div>
+
+          {/* Scopes — least-privilege default (read-only). Write implies read. */}
+          <fieldset className="mt-3">
+            <legend className="text-xs font-medium text-muted-foreground">Scopes</legend>
+            <div className="mt-1.5 flex flex-wrap gap-4">
+              <label className="inline-flex items-center gap-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={scopeRead}
+                  onChange={(e) => setScopeRead(e.target.checked)}
+                  className="rounded border-input"
+                />
+                <span>Read</span>
+                <span className="text-xs text-muted-foreground">(GET / list)</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={scopeWrite}
+                  onChange={(e) => toggleWrite(e.target.checked)}
+                  className="rounded border-input"
+                />
+                <span>Write</span>
+                <span className="text-xs text-muted-foreground">(create / update / delete)</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5 text-sm">
+                <input
+                  type="checkbox"
+                  checked={scopeSend}
+                  onChange={(e) => setScopeSend(e.target.checked)}
+                  className="rounded border-input"
+                />
+                <span>Send</span>
+                <span className="text-xs text-muted-foreground">(messages / broadcast send)</span>
+              </label>
+            </div>
+            {scopes.length === 0 && (
+              <p className="mt-1.5 text-xs text-red-600">Select at least one scope.</p>
+            )}
+          </fieldset>
         </div>
       )}
 
@@ -206,6 +265,16 @@ export function ApiKeysView({ initialKeys }: { initialKeys: ApiKey[] }) {
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{k.name}</p>
                 <p className="mt-0.5 font-mono text-xs text-muted-foreground">{k.key_prefix}</p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {(k.scopes ?? []).map((s) => (
+                    <span
+                      key={s}
+                      className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
                 <p className="mt-0.5 text-xs text-muted-foreground/80">
                   {k.last_used_at ? `Last used ${new Date(k.last_used_at).toLocaleDateString()}` : "Never used"}
                   {k.expires_at ? ` · Expires ${new Date(k.expires_at).toLocaleDateString()}` : ""}

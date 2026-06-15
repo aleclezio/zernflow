@@ -288,10 +288,14 @@ describe("API-key parity — own-workspace WRITES succeed (make the cross-tenant
   });
 });
 
-describe("broadcasts/send — held session-only by design", () => {
-  it("rejects API-key auth (401)", async () => {
+describe("broadcasts/send — hold lifted, now behind the send scope", () => {
+  // KEY_A is a full key (no scopes column → DB default read,write,send), so it
+  // holds send. It passes auth + scope and reaches the broadcast (a draft with
+  // empty content) → 400 missing content, NOT 401. Per-scope behaviour
+  // (read/write keys 403'd here) is covered in v1-scopes.test.ts.
+  it("a full API key (holds send) passes auth+scope → 400 missing content, not 401", async () => {
     const res = await broadcastSend(post(KEY_A, {}), { params: Promise.resolve({ broadcastId: A.broadcastId }) });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(400);
   });
 
   it("still works for a session caller (passes auth → 400 missing content, not 401)", async () => {
