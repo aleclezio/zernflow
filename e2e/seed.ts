@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createHash, randomUUID } from "node:crypto";
 
 // Standalone seed helpers for e2e (no @ alias, so Playwright's runtime resolves
 // them without tsconfig-paths). The service client mirrors
@@ -124,6 +125,24 @@ export async function seedConversation(
     conversationId: conv.id,
     contactName,
   };
+}
+
+/**
+ * Insert an API key for a workspace and return the RAW `zf_` secret.
+ * Mirrors lib/api-key.ts: the stored hash is sha256(raw) (hex). Lets e2e drive
+ * the real Bearer-auth HTTP path without scraping the shown-once UI value.
+ */
+export async function seedApiKey(workspaceId: string, createdBy: string): Promise<string> {
+  const raw = `zf_${randomUUID().replace(/-/g, "")}${randomUUID().replace(/-/g, "")}`;
+  const { error } = await serviceClient().from("api_keys").insert({
+    workspace_id: workspaceId,
+    name: "e2e parity key",
+    key_hash: createHash("sha256").update(raw).digest("hex"),
+    key_prefix: raw.slice(0, 12) + "...",
+    created_by: createdBy,
+  });
+  if (error) throw new Error(`seedApiKey failed: ${error.message}`);
+  return raw;
 }
 
 /** Insert a saved reply (surfaced in the inbox composer picker) and return its id. */

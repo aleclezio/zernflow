@@ -1,31 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { authorizeApiV1 } from "@/lib/api-auth";
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ flowId: string; versionId: string }> }
 ) {
   const { flowId, versionId } = await params;
-  const supabase = await createClient();
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // flow_versions has no workspace_id; under API-key auth the service client
+  // bypasses RLS, so verify the parent flow belongs to the caller's workspace
+  // BEFORE reading any version (else another tenant's flow design leaks/restores).
+  const { data: flow } = await supabase
+    .from("flows")
+    .select("id")
+    .eq("id", flowId)
+    .eq("workspace_id", auth.workspaceId)
+    .maybeSingle();
 
-  // Verify user has access
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
+  if (!flow)
+    return NextResponse.json({ error: "Flow not found" }, { status: 404 });
 
-  if (!membership)
-    return NextResponse.json({ error: "No workspace" }, { status: 404 });
-
-  // Get the version
+  // Get the version (scoped to the now-verified flow)
   const { data: version, error: vErr } = await supabase
     .from("flow_versions")
     .select("nodes, edges, viewport")
@@ -47,7 +45,7 @@ export async function POST(
       updated_at: new Date().toISOString(),
     })
     .eq("id", flowId)
-    .eq("workspace_id", membership.workspace_id);
+    .eq("workspace_id", auth.workspaceId);
 
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });

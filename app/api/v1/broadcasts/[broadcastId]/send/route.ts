@@ -9,6 +9,11 @@ import type { Json } from "@/lib/types/database";
  *
  * Resolves the broadcast's segment filter into contacts,
  * creates broadcast_recipients, and schedules delivery jobs.
+ *
+ * SESSION-ONLY BY DESIGN — do NOT convert to authorizeApiV1. Firing a broadcast
+ * is the one irreversible, mass-blast action; until per-key scopes exist it stays
+ * behind a human login. (API-key auth therefore 401s here via getUser() below.)
+ * See api-key-parity PR / STATUS.md "per-key scopes" follow-up.
  */
 export async function POST(
   request: NextRequest,

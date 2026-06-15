@@ -1,37 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
-async function getWorkspaceId(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  return membership?.workspace_id || null;
-}
+import { authorizeApiV1 } from "@/lib/api-auth";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ flowId: string }> }
 ) {
   const { flowId } = await params;
-  const supabase = await createClient();
-  const workspaceId = await getWorkspaceId(supabase);
-  if (!workspaceId)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
   const { data: flow, error } = await supabase
     .from("flows")
     .select("*, triggers(*)")
     .eq("id", flowId)
-    .eq("workspace_id", workspaceId)
+    .eq("workspace_id", auth.workspaceId)
     .single();
 
   if (error || !flow)
@@ -45,10 +28,9 @@ export async function PUT(
   { params }: { params: Promise<{ flowId: string }> }
 ) {
   const { flowId } = await params;
-  const supabase = await createClient();
-  const workspaceId = await getWorkspaceId(supabase);
-  if (!workspaceId)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
   const body = await request.json();
 
@@ -63,31 +45,32 @@ export async function PUT(
     .from("flows")
     .update(update)
     .eq("id", flowId)
-    .eq("workspace_id", workspaceId)
+    .eq("workspace_id", auth.workspaceId)
     .select("id, name, status, updated_at")
-    .single();
+    .maybeSingle();
 
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!flow)
+    return NextResponse.json({ error: "Flow not found" }, { status: 404 });
 
   return NextResponse.json(flow);
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ flowId: string }> }
 ) {
   const { flowId } = await params;
-  const supabase = await createClient();
-  const workspaceId = await getWorkspaceId(supabase);
-  if (!workspaceId)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
   const { error } = await supabase
     .from("flows")
     .delete()
     .eq("id", flowId)
-    .eq("workspace_id", workspaceId);
+    .eq("workspace_id", auth.workspaceId);
 
   if (error)
     return NextResponse.json({ error: error.message }, { status: 500 });
