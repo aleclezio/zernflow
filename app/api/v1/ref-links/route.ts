@@ -9,7 +9,7 @@ function generateSlug(): string {
 
 /** GET /api/v1/ref-links — list the workspace's ref links (newest first), with flow name/status. */
 export async function GET(request: NextRequest) {
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "read");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
 /** POST /api/v1/ref-links — create a ref link. Body: { name, flowId, channelId? }. */
 export async function POST(request: NextRequest) {
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "write");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 

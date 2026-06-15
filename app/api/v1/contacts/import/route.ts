@@ -15,7 +15,7 @@ const MAX_ROWS = 10_000; // per-import row cap
  * file produces duplicates. Email-based idempotency is a tracked follow-up.
  */
 export async function POST(request: NextRequest) {
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "write");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
   const workspaceId = auth.workspaceId;

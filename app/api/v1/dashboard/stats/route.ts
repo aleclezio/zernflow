@@ -7,7 +7,7 @@ import { authorizeApiV1 } from "@/lib/api-auth";
  * parallel; recent-activity feed from analytics_events).
  */
 export async function GET(request: NextRequest) {
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "read");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 

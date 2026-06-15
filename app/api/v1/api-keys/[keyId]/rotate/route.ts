@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireWorkspaceAdmin } from "@/lib/api-auth";
 import { generateApiKey, hashApiKey, keyPrefix } from "@/lib/api-key";
 
-const SELECT_PUBLIC = "id, name, key_prefix, last_used_at, expires_at, created_at";
+// Rotate updates only key_hash/key_prefix/last_used_at/expires_at — scopes are
+// intentionally untouched, so a rotated key keeps its grants. SELECT_PUBLIC
+// returns scopes so the UI reflects them after rotation.
+const SELECT_PUBLIC = "id, name, key_prefix, scopes, last_used_at, expires_at, created_at";
 
 /**
  * POST /api/v1/api-keys/:keyId/rotate — rotate a key in place: generate a new

@@ -6,7 +6,7 @@ const SLUG_RE = /^[a-z][a-z0-9_]*$/;
 
 /** GET /api/v1/bot-fields — list the workspace's bot fields (oldest first). */
 export async function GET(request: NextRequest) {
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "read");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
 /** POST /api/v1/bot-fields — create a bot field. Body: { name, slug, value?, description? }. */
 export async function POST(request: NextRequest) {
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "write");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 

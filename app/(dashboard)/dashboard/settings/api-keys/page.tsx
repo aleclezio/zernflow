@@ -26,7 +26,7 @@ export default async function ApiKeysPage() {
 
   const { data: keys } = await supabase
     .from("api_keys")
-    .select("id, name, key_prefix, last_used_at, expires_at, created_at")
+    .select("id, name, key_prefix, scopes, last_used_at, expires_at, created_at")
     .eq("workspace_id", workspace.id)
     .order("created_at", { ascending: false });
 

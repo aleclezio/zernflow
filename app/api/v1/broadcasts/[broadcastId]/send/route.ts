@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { authorizeApiV1 } from "@/lib/api-auth";
 import { scheduleBroadcastDelivery } from "@/lib/scheduler";
 import { resolveContacts, type SegmentFilter } from "@/lib/broadcast-segments";
 import type { Json } from "@/lib/types/database";
@@ -10,43 +11,29 @@ import type { Json } from "@/lib/types/database";
  * Resolves the broadcast's segment filter into contacts,
  * creates broadcast_recipients, and schedules delivery jobs.
  *
- * SESSION-ONLY BY DESIGN — do NOT convert to authorizeApiV1. Firing a broadcast
- * is the one irreversible, mass-blast action; until per-key scopes exist it stays
- * behind a human login. (API-key auth therefore 401s here via getUser() below.)
- * See api-key-parity PR / STATUS.md "per-key scopes" follow-up.
+ * Firing a broadcast is the one irreversible, mass-blast action, so it is gated
+ * behind the `send` scope: a session caller (full access) or an API key that
+ * explicitly holds `send`. Under API-key auth the gate returns the RLS-bypassing
+ * service client, so EVERY query below self-scopes with .eq("workspace_id",
+ * auth.workspaceId).
  */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ broadcastId: string }> }
 ) {
   const { broadcastId } = await params;
-  const supabase = await createClient();
+  const gate = await authorizeApiV1(request, "send");
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  // Auth check
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership) {
-    return NextResponse.json({ error: "No workspace" }, { status: 404 });
-  }
-
-  // Fetch the broadcast
+  // Fetch the broadcast. Workspace-scoped: under API-key auth the service client
+  // bypasses RLS, so this .eq is the tenant boundary that proves ownership and
+  // anchors every downstream query.
   const { data: broadcast, error: broadcastErr } = await supabase
     .from("broadcasts")
     .select("*")
     .eq("id", broadcastId)
-    .eq("workspace_id", membership.workspace_id)
+    .eq("workspace_id", auth.workspaceId)
     .single();
 
   if (broadcastErr || !broadcast) {
@@ -66,11 +53,13 @@ export async function POST(
     const body = await request.json();
     if (body.messageContent) {
       messageContent = body.messageContent;
-      // Update the broadcast with the message content
+      // Update the broadcast with the message content (workspace-scoped: the
+      // service client bypasses RLS under API-key auth).
       await supabase
         .from("broadcasts")
         .update({ message_content: messageContent as unknown as Json })
-        .eq("id", broadcastId);
+        .eq("id", broadcastId)
+        .eq("workspace_id", auth.workspaceId);
     }
   } catch {
     // No body or invalid JSON, use existing message_content
@@ -87,7 +76,7 @@ export async function POST(
   const filter = broadcast.segment_filter as unknown as SegmentFilter | null;
   const contactIds = await resolveContacts(
     supabase,
-    membership.workspace_id,
+    auth.workspaceId,
     filter
   );
 

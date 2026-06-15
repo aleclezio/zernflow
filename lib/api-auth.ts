@@ -6,12 +6,16 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveWorkspaceId } from "@/lib/workspace-resolve";
 import { PROFILE_COOKIE, WORKSPACE_COOKIE } from "@/lib/workspace";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { hashApiKey, isApiKeyExpired } from "@/lib/api-key";
+import { hashApiKey, isApiKeyExpired, hasScope, type ApiScope } from "@/lib/api-key";
 
 export interface AuthResult {
   workspaceId: string;
   userId: string | null; // null for API-key auth (no user identity)
   authMethod: "session" | "api_key";
+  // Per-key scopes for API-key auth; null for session auth (= full access).
+  // A pre-scopes key (column backfilled to full by migration 00019) reads as the
+  // full set, so hasScope() also treats null as full access for safety.
+  scopes: string[] | null;
 }
 
 // Per-workspace API-key request budget. In-memory + single-node (see lib/rate-limit.ts).
@@ -69,6 +73,7 @@ async function authenticateSession(): Promise<AuthResult | null> {
     workspaceId: resolvedId ?? accessible[0].workspace_id,
     userId: user.id,
     authMethod: "session",
+    scopes: null, // session auth = full access; scopes only gate API keys
   };
 }
 
@@ -80,7 +85,7 @@ async function authenticateApiKey(apiKey: string): Promise<AuthResult | null> {
 
   const { data: key } = await supabase
     .from("api_keys")
-    .select("workspace_id, expires_at")
+    .select("workspace_id, expires_at, scopes")
     .eq("key_hash", hash)
     .maybeSingle();
 
@@ -101,6 +106,7 @@ async function authenticateApiKey(apiKey: string): Promise<AuthResult | null> {
     workspaceId: key.workspace_id,
     userId: null,
     authMethod: "api_key",
+    scopes: key.scopes,
   };
 }
 
@@ -119,9 +125,18 @@ export type ApiV1Rejected = { ok: false; response: NextResponse };
  * otherwise. API-key requests therefore rely on each endpoint's own explicit
  * .eq("workspace_id", auth.workspaceId) scoping, since the service client
  * bypasses RLS.
+ *
+ * `requiredScope` is the per-key scope this endpoint needs (read = GET/list,
+ * write = create/update/delete, send = outbound messaging). It is REQUIRED so
+ * every call site must declare its scope — a missing arg is a compile error, not
+ * a silent security hole. Session auth bypasses the scope check (full access);
+ * an API key lacking the scope gets 403 "Insufficient scope". A pre-scopes key
+ * has null scopes (full access) via hasScope, so existing integrations are
+ * unaffected.
  */
 export async function authorizeApiV1(
-  request: NextRequest
+  request: NextRequest,
+  requiredScope: ApiScope
 ): Promise<ApiV1Authorized | ApiV1Rejected> {
   const auth = await authenticateRequest(request);
   if (!auth) {
@@ -137,6 +152,12 @@ export async function authorizeApiV1(
       return {
         ok: false,
         response: NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 }),
+      };
+    }
+    if (!hasScope(auth.scopes, requiredScope)) {
+      return {
+        ok: false,
+        response: NextResponse.json({ error: "Insufficient scope" }, { status: 403 }),
       };
     }
   }

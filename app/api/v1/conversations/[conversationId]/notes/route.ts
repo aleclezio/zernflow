@@ -23,7 +23,7 @@ export async function GET(
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
   const { conversationId } = await params;
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "read");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
 
@@ -46,7 +46,7 @@ export async function POST(
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
   const { conversationId } = await params;
-  const gate = await authorizeApiV1(request);
+  const gate = await authorizeApiV1(request, "write");
   if (!gate.ok) return gate.response;
   const { auth, supabase } = gate;
   if (!auth.userId) return NextResponse.json({ error: "Notes require a user session" }, { status: 403 });
