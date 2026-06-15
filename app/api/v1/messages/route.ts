@@ -50,14 +50,17 @@ export async function GET(request: NextRequest) {
       query: { accountId: channel.late_account_id },
     });
 
-    const zernioMessages = (res.data as any)?.data ?? [];
+    // @zernio/node returns the page under `.messages` (GetInboxConversationMessagesResponse),
+    // not `.data`. Keep `.data` as a defensive fallback for SDK drift.
+    const zernioMessages = (res.data as any)?.messages ?? (res.data as any)?.data ?? [];
 
-    // Map Zernio messages to the shape the inbox UI expects
+    // Map Zernio messages to the shape the inbox UI expects. The SDK emits
+    // direction "incoming"/"outgoing" (NOT "inbound"/"outbound").
     const messages = zernioMessages.map((m: any) => ({
       id: m.id,
       conversation_id: conversationId,
-      direction: m.direction === "outbound" ? "outbound" : "inbound",
-      text: m.text ?? m.message ?? null,
+      direction: m.direction === "outgoing" || m.direction === "outbound" ? "outbound" : "inbound",
+      text: m.message ?? m.text ?? null,
       attachments: m.attachments?.length ? m.attachments : null,
       quick_reply_payload: null,
       postback_payload: null,

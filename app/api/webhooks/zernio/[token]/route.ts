@@ -287,7 +287,11 @@ async function processEvent(
         channel_id: channel.id,
         contact_id: contactId,
         platform: channel.platform,
-        late_conversation_id: conv.id,
+        // The Inbox messages API keys off the PLATFORM conversation id (e.g. the
+        // IG thread id), not Zernio's internal conversation.id — store that so the
+        // thread + outbound replies resolve. Fall back to the internal id only if
+        // the platform id is absent.
+        late_conversation_id: conv.platformConversationId ?? conv.id,
         status: "open",
         last_message_at: new Date().toISOString(),
         last_message_preview: messagePreview,
