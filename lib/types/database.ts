@@ -80,12 +80,15 @@ export interface Database {
           late_api_key_encrypted: string | null;
           ai_api_key: string | null;
           ai_provider: string;
+          ai_intent_enabled: boolean;
           zernio_profile_id: string | null;
           zernio_profile_name: string | null;
           webhook_token_hash: string | null;
           webhook_secret_encrypted: string | null;
           zernio_webhook_id: string | null;
           global_keywords: Json | null;
+          auto_assign_mode: string;
+          last_assigned_member_index: number;
           created_at: string;
           updated_at: string;
         };
@@ -96,12 +99,15 @@ export interface Database {
           late_api_key_encrypted?: string | null;
           ai_api_key?: string | null;
           ai_provider?: string;
+          ai_intent_enabled?: boolean;
           zernio_profile_id?: string | null;
           zernio_profile_name?: string | null;
           webhook_token_hash?: string | null;
           webhook_secret_encrypted?: string | null;
           zernio_webhook_id?: string | null;
           global_keywords?: Json | null;
+          auto_assign_mode?: string;
+          last_assigned_member_index?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -112,12 +118,15 @@ export interface Database {
           late_api_key_encrypted?: string | null;
           ai_api_key?: string | null;
           ai_provider?: string;
+          ai_intent_enabled?: boolean;
           zernio_profile_id?: string | null;
           zernio_profile_name?: string | null;
           webhook_token_hash?: string | null;
           webhook_secret_encrypted?: string | null;
           zernio_webhook_id?: string | null;
           global_keywords?: Json | null;
+          auto_assign_mode?: string;
+          last_assigned_member_index?: number;
           updated_at?: string;
         };
         Relationships: [];
@@ -861,6 +870,220 @@ export interface Database {
         Update: Record<string, never>;
         Relationships: [];
       };
+      api_keys: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          scopes: string[];
+          last_used_at: string | null;
+          expires_at: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          scopes?: string[];
+          last_used_at?: string | null;
+          expires_at?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          name?: string;
+          scopes?: string[];
+          last_used_at?: string | null;
+          expires_at?: string | null;
+        };
+        Relationships: [];
+      };
+      webhook_endpoints: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          url: string;
+          name: string;
+          events: string[];
+          secret_encrypted: string | null;
+          is_active: boolean;
+          last_triggered_at: string | null;
+          failure_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          url: string;
+          name: string;
+          events?: string[];
+          secret_encrypted?: string | null;
+          is_active?: boolean;
+          last_triggered_at?: string | null;
+          failure_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          url?: string;
+          name?: string;
+          events?: string[];
+          secret_encrypted?: string | null;
+          is_active?: boolean;
+          last_triggered_at?: string | null;
+          failure_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      saved_replies: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          title: string;
+          content: string;
+          shortcut: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          title: string;
+          content: string;
+          shortcut?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          title?: string;
+          content?: string;
+          shortcut?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      conversation_notes: {
+        Row: {
+          id: string;
+          conversation_id: string;
+          workspace_id: string;
+          user_id: string;
+          content: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          conversation_id: string;
+          workspace_id: string;
+          user_id: string;
+          content: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          content?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      ref_links: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          flow_id: string;
+          channel_id: string | null;
+          name: string;
+          slug: string;
+          clicks: number;
+          conversions: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          flow_id: string;
+          channel_id?: string | null;
+          name: string;
+          slug: string;
+          clicks?: number;
+          conversions?: number;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          flow_id?: string;
+          channel_id?: string | null;
+          is_active?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ref_links_workspace_id_fkey";
+            columns: ["workspace_id"];
+            isOneToOne: false;
+            referencedRelation: "workspaces";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ref_links_flow_id_fkey";
+            columns: ["flow_id"];
+            isOneToOne: false;
+            referencedRelation: "flows";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "ref_links_channel_id_fkey";
+            columns: ["channel_id"];
+            isOneToOne: false;
+            referencedRelation: "channels";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      bot_fields: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          name: string;
+          slug: string;
+          value: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          name: string;
+          slug: string;
+          value?: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          slug?: string;
+          value?: string;
+          description?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       webhook_events: {
         Row: {
           id: string;
@@ -1133,6 +1356,25 @@ export interface Database {
           b_id: string;
         };
         Returns: undefined;
+      };
+      increment_ref_link_clicks: {
+        Args: {
+          link_id: string;
+        };
+        Returns: undefined;
+      };
+      increment_ref_link_conversions: {
+        Args: {
+          link_id: string;
+        };
+        Returns: undefined;
+      };
+      assign_next_member: {
+        Args: {
+          p_workspace_id: string;
+          p_conversation_id: string;
+        };
+        Returns: string | null;
       };
     };
     Enums: {

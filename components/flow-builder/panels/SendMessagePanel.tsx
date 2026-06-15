@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { Plus, X, GripVertical, Image, Type, MousePointer, MessageCircle, LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MessageVariationsField } from "@/components/flow-builder/message-variations-field";
 
 interface QuickReply {
   title: string;
@@ -29,6 +30,7 @@ interface Carousel {
 
 interface Message {
   text?: string;
+  variations?: string[];
   imageUrl?: string;
   quickReplies?: QuickReply[];
   buttons?: Button[];
@@ -269,6 +271,14 @@ function MessageEditor({
               />
               <VariableHint />
             </div>
+
+            {/* Variations */}
+            <MessageVariationsField
+              variations={message.variations || []}
+              onChange={(variations) =>
+                onChange({ ...message, variations: variations.length ? variations : undefined })
+              }
+            />
 
             {/* Image URL */}
             <div>

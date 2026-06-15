@@ -12,6 +12,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { PlatformIcon } from "@/components/platform-icon";
+import { ConversationNotes } from "@/components/inbox/conversation-notes";
 import type { Database, Platform } from "@/lib/types/database";
 
 type Contact = Database["public"]["Tables"]["contacts"]["Row"];
@@ -44,10 +45,12 @@ function formatDate(dateStr: string | null): string {
 
 export function ContactPanel({
   contactId,
+  conversationId,
   workspaceId,
   onClose,
 }: {
   contactId: string | null;
+  conversationId: string | null;
   workspaceId: string;
   onClose: () => void;
 }) {
@@ -281,6 +284,9 @@ export function ContactPanel({
                 </div>
               </div>
             )}
+
+            {/* Internal notes (per conversation) */}
+            {conversationId && <ConversationNotes conversationId={conversationId} />}
           </div>
         </div>
       ) : (

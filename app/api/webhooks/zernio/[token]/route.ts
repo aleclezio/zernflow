@@ -7,6 +7,7 @@ import { pickSignatureHeader, resolveEventId, sha256Hex, verifySignature } from 
 import { checkRateLimit } from "@/lib/rate-limit";
 import { logSecurityEvent } from "@/lib/security-events";
 import { matchCommentTrigger, type CommentTrigger } from "@/lib/flow-engine/comment-matcher";
+import { dispatchWebhookEvent } from "@/lib/webhook-dispatcher";
 
 /**
  * POST /api/webhooks/zernio/[token]
@@ -264,6 +265,14 @@ async function processEvent(
       contact_id: contactId,
       event_type: "contact_created",
     });
+
+    // Fire-and-forget: notify outbound webhooks about the new contact (must not
+    // delay the 200 owed to Zernio — a slow ack would trigger its retry).
+    void dispatchWebhookEvent(channel.workspace_id, "contact.created", {
+      contactId,
+      displayName: senderName,
+      platform: channel.platform,
+    });
   }
 
   // ── Upsert conversation ──────────────────────────────────────────────────
@@ -300,9 +309,32 @@ async function processEvent(
         preview: messagePreview,
       })
       .then(() => {});
+  } else {
+    // Brand-new conversation: assign it to the next team member if the workspace
+    // has round-robin enabled. The RPC is atomic (locks the workspace counter row)
+    // and no-ops in manual mode. Best-effort — a failure must never drop the
+    // inbound message (a 500 here would make Zernio retry against the committed
+    // dedupe row, which no-ops, dropping the event).
+    try {
+      const { error: assignErr } = await supabase.rpc("assign_next_member", {
+        p_workspace_id: channel.workspace_id,
+        p_conversation_id: conversation.id,
+      });
+      if (assignErr) console.error("auto-assign failed:", assignErr.message);
+    } catch (err) {
+      console.error("auto-assign failed:", err instanceof Error ? err.message : "unknown");
+    }
   }
 
   // Messages are stored by Zernio (source of truth) — no local insert needed.
+
+  // Fire-and-forget: notify outbound webhooks about the received message.
+  void dispatchWebhookEvent(channel.workspace_id, "message.received", {
+    contactId,
+    conversationId: conversation.id,
+    text: msg.text || null,
+    platform: channel.platform,
+  });
 
   // ── Flow engine ───────────────────────────────────────────────────────────
 

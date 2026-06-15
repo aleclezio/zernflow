@@ -5,6 +5,7 @@ import { Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NodeType } from "@/lib/types/database";
 import { EnrollSequencePanel } from "./EnrollSequencePanel";
+import { MessageVariationsField } from "@/components/flow-builder/message-variations-field";
 
 interface ActionPanelData {
   actionType?: NodeType;
@@ -26,6 +27,7 @@ interface ActionPanelData {
   confirmed?: boolean;
   sequenceId?: string;
   text?: string;
+  variations?: string[];
   imageUrl?: string;
   [key: string]: unknown;
 }
@@ -414,6 +416,13 @@ function PrivateReplyConfig({ data, onChange }: ActionSubPanelProps) {
           Use {"{{variable}}"} for dynamic values (e.g. {"{{commenter_name}}"}).
         </p>
       </div>
+
+      <MessageVariationsField
+        variations={data.variations || []}
+        onChange={(variations) =>
+          onChange({ ...data, variations: variations.length ? variations : undefined })
+        }
+      />
 
       <div>
         <label className="mb-2 block text-xs font-semibold text-foreground">

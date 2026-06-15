@@ -6,6 +6,7 @@ import { ConversationList } from "@/components/inbox/conversation-list";
 import { MessageThread } from "@/components/inbox/message-thread";
 import { ContactPanel } from "@/components/inbox/contact-panel";
 import { createClient } from "@/lib/supabase/client";
+import { withBasePath } from "@/lib/client-url";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/types/database";
 
@@ -42,7 +43,7 @@ export function InboxView({
       setLoadingMessages(true);
       try {
         const res = await fetch(
-          `/api/v1/messages?conversationId=${selected!.id}`
+          withBasePath(`/api/v1/messages?conversationId=${selected!.id}`)
         );
         if (res.ok) {
           const data = await res.json();
@@ -116,6 +117,7 @@ export function InboxView({
       {showContactPanel && selected?.contact_id && (
         <ContactPanel
           contactId={selected.contact_id}
+          conversationId={selected.id}
           workspaceId={workspaceId}
           onClose={() => setShowContactPanel(false)}
         />

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, RotateCcw, Loader2, History } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { withBasePath } from "@/lib/client-url";
 
 interface Version {
   id: string;
@@ -33,7 +34,7 @@ export function VersionHistoryPanel({
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/v1/flows/${flowId}/versions`);
+        const res = await fetch(withBasePath(`/api/v1/flows/${flowId}/versions`));
         if (res.ok) {
           const data = await res.json();
           setVersions(data);
@@ -49,7 +50,7 @@ export function VersionHistoryPanel({
     setRestoring(versionId);
     try {
       const res = await fetch(
-        `/api/v1/flows/${flowId}/versions/${versionId}/restore`,
+        withBasePath(`/api/v1/flows/${flowId}/versions/${versionId}/restore`),
         { method: "POST" }
       );
       if (res.ok) {

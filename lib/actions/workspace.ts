@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { setZernioKey, setAiKey } from "@/lib/workspace-keys";
+import { isValidAutoAssignMode } from "@/lib/auto-assign";
 import { WORKSPACE_COOKIE } from "@/lib/workspace";
 
 /**
@@ -12,7 +13,14 @@ import { WORKSPACE_COOKIE } from "@/lib/workspace";
  */
 export async function updateWorkspaceSettings(
   workspaceId: string,
-  updates: { name?: string; globalKeywords?: string[]; apiKey?: string; aiKey?: string }
+  updates: {
+    name?: string;
+    globalKeywords?: string[];
+    apiKey?: string;
+    aiKey?: string;
+    aiIntentEnabled?: boolean;
+    autoAssignMode?: string;
+  }
 ) {
   const supabase = await createClient();
   const {
@@ -37,6 +45,14 @@ export async function updateWorkspaceSettings(
   const base: Record<string, unknown> = {};
   if (updates.name?.trim()) base.name = updates.name.trim();
   if (updates.globalKeywords) base.global_keywords = updates.globalKeywords;
+  // Use an explicit undefined check so toggling the feature OFF (false) persists.
+  if (updates.aiIntentEnabled !== undefined) base.ai_intent_enabled = updates.aiIntentEnabled;
+  if (updates.autoAssignMode !== undefined) {
+    if (!isValidAutoAssignMode(updates.autoAssignMode)) {
+      return { error: "Invalid auto-assign mode" };
+    }
+    base.auto_assign_mode = updates.autoAssignMode;
+  }
   if (Object.keys(base).length > 0) {
     const { error } = await supabase
       .from("workspaces")

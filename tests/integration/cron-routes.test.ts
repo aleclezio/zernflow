@@ -9,6 +9,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import { GET as jobsGET } from "@/app/api/cron/jobs/route";
 import { GET as sequencesGET } from "@/app/api/cron/sequences/route";
+import { GET as broadcastsGET } from "@/app/api/cron/broadcasts/route";
 
 const SECRET = process.env.CRON_SECRET!;
 
@@ -25,6 +26,11 @@ describe("cron route auth", () => {
       req(`http://localhost:3000/api/cron/sequences?key=${SECRET}`)
     );
     expect(res2.status).toBe(401);
+
+    const res3 = await broadcastsGET(
+      req(`http://localhost:3000/api/cron/broadcasts?key=${SECRET}`)
+    );
+    expect(res3.status).toBe(401);
   });
 
   it("rejects a wrong Bearer token", async () => {
@@ -32,6 +38,11 @@ describe("cron route auth", () => {
       req("http://localhost:3000/api/cron/jobs", { authorization: "Bearer wrong" })
     );
     expect(res.status).toBe(401);
+
+    const res2 = await broadcastsGET(
+      req("http://localhost:3000/api/cron/broadcasts", { authorization: "Bearer wrong" })
+    );
+    expect(res2.status).toBe(401);
   });
 
   it("accepts the correct Bearer token", async () => {
@@ -44,5 +55,10 @@ describe("cron route auth", () => {
       req("http://localhost:3000/api/cron/sequences", { authorization: `Bearer ${SECRET}` })
     );
     expect(res2.status).toBe(200);
+
+    const res3 = await broadcastsGET(
+      req("http://localhost:3000/api/cron/broadcasts", { authorization: `Bearer ${SECRET}` })
+    );
+    expect(res3.status).toBe(200);
   });
 });

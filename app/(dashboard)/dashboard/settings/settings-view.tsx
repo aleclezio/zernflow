@@ -17,6 +17,7 @@ import {
   Users,
   ChevronRight,
   Sparkles,
+  Webhook,
 } from "lucide-react";
 import Link from "next/link";
 import { withBasePath } from "@/lib/client-url";
@@ -27,6 +28,8 @@ interface WorkspaceSettings {
   name: string;
   hasApiKey: boolean;
   hasAiKey: boolean;
+  aiIntentEnabled: boolean;
+  autoAssignMode: string;
   globalKeywords: string[];
 }
 
@@ -54,6 +57,8 @@ export function SettingsView({
   const [showApiKey, setShowApiKey] = useState(false);
   const [aiKey, setAiKey] = useState("");
   const [showAiKey, setShowAiKey] = useState(false);
+  const [aiIntentEnabled, setAiIntentEnabled] = useState(workspace.aiIntentEnabled);
+  const [roundRobin, setRoundRobin] = useState(workspace.autoAssignMode === "round-robin");
   const [keywords, setKeywords] = useState<string[]>(workspace.globalKeywords);
   const [newKeyword, setNewKeyword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -150,6 +155,8 @@ export function SettingsView({
         // Only update keys if user entered new ones
         apiKey: apiKey.trim() || undefined,
         aiKey: aiKey.trim() || undefined,
+        aiIntentEnabled,
+        autoAssignMode: roundRobin ? "round-robin" : "manual",
       });
 
       if (result?.error) {
@@ -402,6 +409,49 @@ export function SettingsView({
                 AI Gateway key configured
               </p>
             )}
+
+            {/* AI intent recognition — opt-in (fires an LLM call per unmatched message) */}
+            <label className="mt-4 flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 p-3">
+              <input
+                type="checkbox"
+                checked={aiIntentEnabled}
+                onChange={(e) => setAiIntentEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span className="text-xs">
+                <span className="font-medium">AI intent recognition</span>
+                <span className="block text-muted-foreground">
+                  When a message matches no keyword trigger, use the AI Gateway to route it to the
+                  closest keyword flow. Runs one model call per unmatched message, so it&apos;s off by
+                  default and needs an AI Gateway key.
+                </span>
+              </span>
+            </label>
+          </section>
+
+          <hr className="border-border" />
+
+          {/* Inbox auto-assignment */}
+          <section>
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Inbox auto-assignment</h2>
+            </div>
+            <label className="mt-3 flex items-start gap-2.5 rounded-lg border border-border bg-muted/40 p-3">
+              <input
+                type="checkbox"
+                checked={roundRobin}
+                onChange={(e) => setRoundRobin(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-input"
+              />
+              <span className="text-xs">
+                <span className="font-medium">Round-robin assignment</span>
+                <span className="block text-muted-foreground">
+                  When a brand-new contact starts a conversation, assign it to the next team member in
+                  rotation. Off (manual) leaves new conversations unassigned.
+                </span>
+              </span>
+            </label>
           </section>
 
           <hr className="border-border" />
@@ -482,6 +532,70 @@ export function SettingsView({
             >
               <Users className="h-4 w-4" />
               Manage Team
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            </Link>
+          </section>
+
+          <hr className="border-border" />
+
+          {/* Bot Fields */}
+          <section>
+            <div className="flex items-center gap-2">
+              <Hash className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Bot Fields</h2>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Workspace variables you can reuse across flows as {"{{bot.slug}}"}.
+            </p>
+            <Link
+              href="/dashboard/settings/bot-fields"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              <Hash className="h-4 w-4" />
+              Manage Bot Fields
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            </Link>
+          </section>
+
+          <hr className="border-border" />
+
+          {/* API Keys */}
+          <section>
+            <div className="flex items-center gap-2">
+              <Key className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">API Keys</h2>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Programmatic access to the v1 API (owner/admin only). Issue, rotate, and revoke keys.
+            </p>
+            <Link
+              href="/dashboard/settings/api-keys"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              <Key className="h-4 w-4" />
+              Manage API Keys
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            </Link>
+          </section>
+
+          <hr className="border-border" />
+
+          {/* Webhooks */}
+          <section>
+            <div className="flex items-center gap-2">
+              <Webhook className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Webhooks</h2>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Send workspace events to your own URL (owner/admin only). Signed deliveries, with test and
+              auto-disable on repeated failures.
+            </p>
+            <Link
+              href="/dashboard/settings/webhooks"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              <Webhook className="h-4 w-4" />
+              Manage Webhooks
               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
             </Link>
           </section>

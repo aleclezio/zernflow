@@ -47,3 +47,10 @@ supabase/.temp/
 # Next.js dynamic segment, not a secret: re-include against machine-global *token* ignore rules
 !app/api/webhooks/zernio/\[token\]/
 !app/api/webhooks/zernio/\[token\]/**
+
+# Playwright e2e (regenerable: saved session, reports, traces, browser cache)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/e2e/.auth/

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { withBasePath } from "@/lib/client-url";
 import { PlatformIcon } from "@/components/platform-icon";
+import { SavedReplyPicker } from "@/components/inbox/saved-reply-picker";
 import type { Database, ConversationStatus } from "@/lib/types/database";
 
 type Message = Database["public"]["Tables"]["messages"]["Row"];
@@ -154,6 +155,14 @@ export function MessageThread({
     el.style.height = `${Math.min(el.scrollHeight, 150)}px`;
   }, []);
 
+  const insertSavedReply = useCallback((text: string) => {
+    setInput((prev) => (prev.trim() ? `${prev.trim()}\n${text}` : text));
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      autoResize();
+    });
+  }, [autoResize]);
+
   useEffect(() => {
     setMessages(initialMessages);
   }, [initialMessages]);
@@ -182,7 +191,7 @@ export function MessageThread({
         async () => {
           try {
             const res = await fetch(
-              `/api/v1/messages?conversationId=${conversation.id}`
+              withBasePath(`/api/v1/messages?conversationId=${conversation.id}`)
             );
             if (res.ok) {
               const freshMessages = await res.json();
@@ -387,6 +396,7 @@ export function MessageThread({
       {/* Composer */}
       <div className="border-t border-border p-4">
         <div className="mx-auto flex max-w-2xl items-end gap-2">
+          <SavedReplyPicker onInsert={insertSavedReply} />
           <div className="flex-1">
             <textarea
               ref={textareaRef}

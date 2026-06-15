@@ -19,8 +19,10 @@ import "@xyflow/react/dist/style.css";
 
 import { useCallback, useRef, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Rocket, Loader2, History, Play } from "lucide-react";
+import { ArrowLeft, Save, Rocket, Loader2, History, Play, Copy, Download, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/client-url";
+import { flowExportFilename } from "@/lib/flow-export";
 import { createClient } from "@/lib/supabase/client";
 import type { Database, FlowStatus, Json } from "@/lib/types/database";
 
@@ -34,6 +36,7 @@ import { AiResponseNode } from "./nodes/AiResponseNode";
 import { NodeConfigSidebar } from "./panels/NodeConfigSidebar";
 import { VersionHistoryPanel } from "./panels/VersionHistoryPanel";
 import { TestPanel } from "./panels/TestPanel";
+import { FlowAnalyticsProvider, useFlowAnalytics } from "./analytics-context";
 
 type Flow = Database["public"]["Tables"]["flows"]["Row"];
 
@@ -79,6 +82,12 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
   const supabase = createClient();
+  const {
+    showAnalytics,
+    setShowAnalytics,
+    fetchAnalytics,
+    loading: analyticsLoading,
+  } = useFlowAnalytics();
 
   const initialNodes: Node[] = Array.isArray(flow.nodes)
     ? (flow.nodes as unknown as Node[])
@@ -97,6 +106,8 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
   const [versionPanelOpen, setVersionPanelOpen] = useState(false);
   const [testPanelOpen, setTestPanelOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [cloning, setCloning] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) || null
@@ -240,7 +251,7 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
       // First save the current state
       await saveFlow();
       // Then call the publish API which increments version and saves snapshot
-      const res = await fetch(`/api/v1/flows/${flow.id}/publish`, {
+      const res = await fetch(withBasePath(`/api/v1/flows/${flow.id}/publish`), {
         method: "POST",
       });
       if (!res.ok) {
@@ -256,6 +267,58 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
       setPublishing(false);
     }
   }, [saveFlow, flow.id]);
+
+  const clonePendingRef = useRef(false);
+  const handleClone = useCallback(async () => {
+    if (clonePendingRef.current) return;
+    clonePendingRef.current = true;
+    setCloning(true);
+    try {
+      const res = await fetch(withBasePath(`/api/v1/flows/${flow.id}/clone`), {
+        method: "POST",
+      });
+      if (!res.ok) {
+        setSaveError("Failed to clone");
+        setTimeout(() => setSaveError(null), 3000);
+        return;
+      }
+      const cloned = await res.json();
+      router.push(`/dashboard/flows/${cloned.id}`);
+    } finally {
+      clonePendingRef.current = false;
+      setCloning(false);
+    }
+  }, [flow.id, router]);
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      // Persist the current canvas first (like Publish) so the export reflects
+      // what's on screen and the filename matches the saved name.
+      await saveFlow();
+      const res = await fetch(withBasePath(`/api/v1/flows/${flow.id}/export`));
+      if (!res.ok) {
+        setSaveError("Failed to export");
+        setTimeout(() => setSaveError(null), 3000);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = flowExportFilename(flowName);
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  }, [saveFlow, flow.id, flowName]);
+
+  const handleToggleAnalytics = useCallback(() => {
+    const next = !showAnalytics;
+    setShowAnalytics(next);
+    if (next) fetchAnalytics(flow.id);
+  }, [showAnalytics, setShowAnalytics, fetchAnalytics, flow.id]);
 
   return (
     <div className="flex h-full flex-col">
@@ -337,6 +400,46 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
           >
             <History className="h-3.5 w-3.5" />
             History
+          </button>
+          <button
+            onClick={handleToggleAnalytics}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+              showAnalytics
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-background hover:bg-accent"
+            )}
+          >
+            {analyticsLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <BarChart3 className="h-3.5 w-3.5" />
+            )}
+            Analytics
+          </button>
+          <button
+            onClick={handleClone}
+            disabled={cloning}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            {cloning ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+            Clone
+          </button>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            {exporting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            Export
           </button>
           <button
             onClick={handleSave}
@@ -432,7 +535,9 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
 export function FlowCanvas({ flow }: FlowCanvasProps) {
   return (
     <ReactFlowProvider>
-      <FlowCanvasInner flow={flow} />
+      <FlowAnalyticsProvider>
+        <FlowCanvasInner flow={flow} />
+      </FlowAnalyticsProvider>
     </ReactFlowProvider>
   );
 }

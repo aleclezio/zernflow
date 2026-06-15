@@ -23,6 +23,10 @@ import { safeFetch } from "./safe-fetch";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
 import { resolvePrivateReplyIds } from "./comment-matcher";
+import { pickVariant } from "./pick-variant";
+import { interpolateVariables } from "./interpolate";
+import { loadBotFieldVars } from "./bot-fields";
+import { dispatchWebhookEvent } from "@/lib/webhook-dispatcher";
 
 export async function executeFlow(
   supabase: SupabaseClient<Database>,
@@ -103,6 +107,12 @@ export async function executeFlow(
 
   if (!session) return;
 
+  // Load workspace bot fields into {{bot.*}} (fresh; not persisted to the session).
+  context.variables = {
+    ...(context.variables || {}),
+    ...(await loadBotFieldVars(supabase, context.workspaceId)),
+  };
+
   // Track flow_started
   await supabase.from("analytics_events").insert({
     workspace_id: context.workspaceId,
@@ -122,6 +132,15 @@ export async function executeFlow(
 
   const startNode = nodes.find((n) => n.id === firstEdge.target);
   if (!startNode) return;
+
+  // Fire-and-forget: notify outbound webhooks about the flow start. Placed after
+  // the trigger/edge/start-node guards so it fires only when the flow actually
+  // begins executing — never an orphaned flow.started with no flow.completed.
+  void dispatchWebhookEvent(context.workspaceId, "flow.started", {
+    flowId: context.flowId,
+    contactId: context.contactId,
+    channelId: context.channelId,
+  });
 
   await traverseNodes(supabase, session.id, startNode, nodes, edges, context, 0);
 }
@@ -181,6 +200,7 @@ async function resumeSession(
   context.variables = {
     ...(context.variables || {}),
     ...((session.variables as Record<string, string>) || {}),
+    ...(await loadBotFieldVars(supabase, context.workspaceId)),
   };
 
   // Update session
@@ -374,7 +394,8 @@ async function executeSendMessage(
   }
 
   for (const msg of data.messages) {
-    const adapted = adaptMessage(msg, context.platform!);
+    const chosen = pickVariant(msg.text ?? "", msg.variations);
+    const adapted = adaptMessage({ ...msg, text: chosen }, context.platform!);
     const text = interpolateVariables(adapted.text, context.variables || {});
 
     try {
@@ -424,6 +445,13 @@ async function executeSendMessage(
         flow_id: context.flowId,
         contact_id: context.contactId,
         event_type: "message_sent",
+      });
+
+      // Fire-and-forget: notify outbound webhooks about the sent message.
+      void dispatchWebhookEvent(context.workspaceId, "message.sent", {
+        contactId: context.contactId,
+        conversationId: context.conversationId,
+        text,
       });
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -595,12 +623,26 @@ async function executeTag(
       .from("contact_tags")
       .upsert({ contact_id: context.contactId, tag_id: tag.id })
       .select();
+
+    // Fire-and-forget: notify outbound webhooks about the tag addition.
+    void dispatchWebhookEvent(context.workspaceId, "tag.added", {
+      contactId: context.contactId,
+      tagId: tag.id,
+      tagName: data.tagName,
+    });
   } else {
     await supabase
       .from("contact_tags")
       .delete()
       .eq("contact_id", context.contactId)
       .eq("tag_id", tag.id);
+
+    // Fire-and-forget: notify outbound webhooks about the tag removal.
+    void dispatchWebhookEvent(context.workspaceId, "tag.removed", {
+      contactId: context.contactId,
+      tagId: tag.id,
+      tagName: data.tagName,
+    });
   }
 }
 
@@ -817,7 +859,7 @@ async function executePrivateReply(
   }
   const { commentId, postId } = ids;
 
-  const text = interpolateVariables(data.text, context.variables || {});
+  const text = interpolateVariables(pickVariant(data.text, data.variations), context.variables || {});
 
   try {
     await zernio.comments.sendPrivateReplyToComment({
@@ -871,6 +913,13 @@ async function completeSession(
         flow_id: session.flow_id,
         contact_id: session.contact_id,
         event_type: "flow_completed",
+      });
+
+      // Fire-and-forget: notify outbound webhooks about the flow completion.
+      void dispatchWebhookEvent(flow.workspace_id, "flow.completed", {
+        flowId: session.flow_id,
+        contactId: session.contact_id,
+        channelId: session.channel_id,
       });
     }
   }
@@ -928,11 +977,3 @@ async function executeEnrollSequence(
   }
 }
 
-function interpolateVariables(
-  text: string,
-  variables: Record<string, unknown>
-): string {
-  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    return String(variables[key] ?? `{{${key}}}`);
-  });
-}

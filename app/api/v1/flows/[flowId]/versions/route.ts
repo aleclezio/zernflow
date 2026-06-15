@@ -1,18 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { authorizeApiV1 } from "@/lib/api-auth";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ flowId: string }> }
 ) {
   const { flowId } = await params;
-  const supabase = await createClient();
+  const gate = await authorizeApiV1(request, "read");
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // flow_versions has no workspace_id of its own; under API-key auth the service
+  // client bypasses RLS, so verify the parent flow belongs to the caller's
+  // workspace BEFORE listing its versions (else any flowId's history leaks).
+  const { data: flow } = await supabase
+    .from("flows")
+    .select("id")
+    .eq("id", flowId)
+    .eq("workspace_id", auth.workspaceId)
+    .maybeSingle();
+
+  if (!flow)
+    return NextResponse.json({ error: "Flow not found" }, { status: 404 });
 
   const { data: versions, error } = await supabase
     .from("flow_versions")
