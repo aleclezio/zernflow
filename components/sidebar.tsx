@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { withBasePath } from "@/lib/client-url";
 import { useState, useEffect } from "react";
 import {
   ArrowLeft,
@@ -88,7 +88,8 @@ export function Sidebar({
         className="flex items-center gap-2 border-b border-sidebar-border px-4 py-3 text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        <Image src="/lygge-mark.png" alt="lygge" width={28} height={18} className="dark:invert" />
+        {/* eslint-disable-next-line @next/next/no-img-element -- tiny static logo; next/image's optimizer drops the /engage basePath from its url param (400s). Plain <img> via withBasePath is the repo's basePath idiom. */}
+        <img src={withBasePath("/lygge-mark.png")} alt="lygge" width={28} height={18} className="dark:invert" />
         <span>Command Centre</span>
       </a>
       <div className="border-b border-sidebar-border px-3 py-3">
