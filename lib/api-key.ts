@@ -32,3 +32,38 @@ export function isApiKeyExpired(expiresAt: string | null, nowMs: number): boolea
   if (Number.isNaN(expiresMs)) return true;
   return expiresMs <= nowMs;
 }
+
+/**
+ * Per-key API scopes. `read` = GET/list; `write` = create/update/delete;
+ * `send` = outbound messaging (inbox replies, broadcast send). A key holds an
+ * explicit subset; each v1 route declares the scope it needs (see authorizeApiV1).
+ */
+export const API_SCOPES = ["read", "write", "send"] as const;
+export type ApiScope = (typeof API_SCOPES)[number];
+
+export function isApiScope(s: unknown): s is ApiScope {
+  return typeof s === "string" && (API_SCOPES as readonly string[]).includes(s);
+}
+
+/**
+ * Validate + dedupe a requested scope list (e.g. from a key-creation request).
+ * Returns null if the input is not an array, contains an unknown scope, or is
+ * empty — callers should 400 on null. Order is normalised to API_SCOPES order.
+ */
+export function parseScopes(input: unknown): ApiScope[] | null {
+  if (!Array.isArray(input)) return null;
+  for (const s of input) if (!isApiScope(s)) return null;
+  const set = new Set(input as ApiScope[]);
+  const out = API_SCOPES.filter((s) => set.has(s));
+  return out.length > 0 ? out : null;
+}
+
+/**
+ * True if a key bearing `scopes` may perform an action requiring `required`.
+ * null/undefined `scopes` = full access (backward-compat for keys minted before
+ * the scopes column existed; the DB default also backfills those rows to full).
+ */
+export function hasScope(scopes: readonly string[] | null | undefined, required: ApiScope): boolean {
+  if (scopes == null) return true;
+  return scopes.includes(required);
+}

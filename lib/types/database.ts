@@ -877,6 +877,7 @@ export interface Database {
           name: string;
           key_hash: string;
           key_prefix: string;
+          scopes: string[];
           last_used_at: string | null;
           expires_at: string | null;
           created_by: string | null;
@@ -888,6 +889,7 @@ export interface Database {
           name: string;
           key_hash: string;
           key_prefix: string;
+          scopes?: string[];
           last_used_at?: string | null;
           expires_at?: string | null;
           created_by?: string | null;
@@ -895,6 +897,7 @@ export interface Database {
         };
         Update: {
           name?: string;
+          scopes?: string[];
           last_used_at?: string | null;
           expires_at?: string | null;
         };
