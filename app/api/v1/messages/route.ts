@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { authorizeApiV1 } from "@/lib/api-auth";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
 
@@ -9,22 +9,23 @@ import { getZernioKey } from "@/lib/workspace-keys";
  * Fetches messages from the Zernio API (source of truth) instead of a local mirror.
  */
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
   const conversationId = request.nextUrl.searchParams.get("conversationId");
   if (!conversationId) {
     return NextResponse.json({ error: "conversationId required" }, { status: 400 });
   }
 
-  // Look up the Zernio conversation ID and workspace API key
+  // Look up the Zernio conversation ID and workspace API key. Workspace-scoped:
+  // under API-key auth the service client bypasses RLS, so this .eq is the only
+  // tenant boundary on the conversation lookup.
   const { data: conversation } = await supabase
     .from("conversations")
     .select("late_conversation_id, workspace_id, channels(late_account_id)")
     .eq("id", conversationId)
+    .eq("workspace_id", auth.workspaceId)
     .single();
 
   if (!conversation?.late_conversation_id) {
@@ -85,11 +86,9 @@ export async function GET(request: NextRequest) {
  * Sends a message via Zernio API. No local message storage — Zernio is the source of truth.
  */
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request);
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
   const body = await request.json();
   const { conversationId, text } = body;
@@ -101,11 +100,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Get conversation with channel info
+  // Get conversation with channel info. Workspace-scoped (service client bypasses
+  // RLS under API-key auth, so this .eq is the tenant boundary).
   const { data: conversation } = await supabase
     .from("conversations")
     .select("*, channels(*)")
     .eq("id", conversationId)
+    .eq("workspace_id", auth.workspaceId)
     .single();
 
   if (!conversation) {
@@ -146,7 +147,8 @@ export async function POST(request: NextRequest) {
         last_message_at: new Date().toISOString(),
         last_message_preview: text.slice(0, 100),
       })
-      .eq("id", conversationId);
+      .eq("id", conversationId)
+      .eq("workspace_id", auth.workspaceId);
 
     // Return a message-shaped response for the UI's optimistic update
     return NextResponse.json(
@@ -162,7 +164,7 @@ export async function POST(request: NextRequest) {
         platform_message_id: messageId,
         sent_by_flow_id: null,
         sent_by_node_id: null,
-        sent_by_user_id: user.id,
+        sent_by_user_id: auth.userId,
         status: "sent",
         created_at: new Date().toISOString(),
       },
