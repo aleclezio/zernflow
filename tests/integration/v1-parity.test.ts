@@ -234,6 +234,60 @@ describe("API-key parity — cross-tenant isolation (A's key CANNOT touch B)", (
   });
 });
 
+describe("API-key parity — own-workspace WRITES succeed (make the cross-tenant 404s meaningful)", () => {
+  // Without these, a route that 404'd for EVERYONE (owner included) would still
+  // pass the cross-tenant assertions. These prove the 404 is specifically the
+  // tenant boundary, not a broken route. Throwaway resources, so shared A/B
+  // fixtures other tests assert on are untouched.
+  it("flow PUT updates the caller's own flow", async () => {
+    const { data: f } = await serviceClient()
+      .from("flows")
+      .insert({ workspace_id: A.workspaceId, name: "before", status: "draft", version: 1, nodes: [], edges: [] })
+      .select("id")
+      .single();
+    const res = await flowPUT(put(KEY_A, { name: "after" }), { params: Promise.resolve({ flowId: f!.id }) });
+    expect(res.status).toBe(200);
+    const { data } = await serviceClient().from("flows").select("name").eq("id", f!.id).single();
+    expect(data!.name).toBe("after");
+  });
+
+  it("flow DELETE removes the caller's own flow", async () => {
+    const { data: f } = await serviceClient()
+      .from("flows")
+      .insert({ workspace_id: A.workspaceId, name: "doomed", status: "draft", version: 1, nodes: [], edges: [] })
+      .select("id")
+      .single();
+    const res = await flowDELETE(get(KEY_A), { params: Promise.resolve({ flowId: f!.id }) });
+    expect(res.status).toBe(200);
+    const { data } = await serviceClient().from("flows").select("id").eq("id", f!.id).maybeSingle();
+    expect(data).toBeNull();
+  });
+
+  it("flow restore copies the caller's own version back into the caller's flow", async () => {
+    const svc = serviceClient();
+    const { data: f } = await svc
+      .from("flows")
+      .insert({ workspace_id: A.workspaceId, name: "restorable", status: "published", version: 2, nodes: [{ id: "current" }], edges: [] })
+      .select("id")
+      .single();
+    const { data: v } = await svc
+      .from("flow_versions")
+      .insert({ flow_id: f!.id, version: 1, name: "snap", nodes: [{ id: "restored" }], edges: [] })
+      .select("id")
+      .single();
+    const res = await flowRestore(get(KEY_A), { params: Promise.resolve({ flowId: f!.id, versionId: v!.id }) });
+    expect(res.status).toBe(200);
+    const { data } = await svc.from("flows").select("nodes, status").eq("id", f!.id).single();
+    expect(data!.nodes).toEqual([{ id: "restored" }]);
+    expect(data!.status).toBe("draft");
+  });
+
+  it("messages POST reaches the caller's own conversation (auth+scope pass → 400 missing Zernio key, not 401/404)", async () => {
+    const res = await messagesPOST(post(KEY_A, { conversationId: A.conversationId, text: "hi" }));
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("broadcasts/send — held session-only by design", () => {
   it("rejects API-key auth (401)", async () => {
     const res = await broadcastSend(post(KEY_A, {}), { params: Promise.resolve({ broadcastId: A.broadcastId }) });
