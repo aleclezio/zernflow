@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { ChevronDown, Plus, Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { withBasePath } from "@/lib/client-url";
 import { switchWorkspace, createWorkspace } from "@/lib/actions/workspace";
 
 interface WorkspaceItem {
@@ -24,7 +24,6 @@ export function WorkspaceSwitcher({
   current: { id: string; name: string };
   workspaces: WorkspaceItem[];
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -57,9 +56,10 @@ export function WorkspaceSwitcher({
     }
     setSwitching(workspaceId);
     await switchWorkspace(workspaceId);
-    router.refresh();
-    setOpen(false);
-    setSwitching(null);
+    // Hard navigation to the workspace home: a full reload re-resolves the new
+    // workspace server-side. router.refresh() left the current view stale until
+    // the next route change (the "doesn't switch until I click a tab" bug).
+    window.location.assign(withBasePath("/dashboard"));
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -68,10 +68,8 @@ export function WorkspaceSwitcher({
     setSwitching("new");
     const result = await createWorkspace(newName.trim());
     if (result.ok) {
-      router.refresh();
-      setOpen(false);
-      setCreating(false);
-      setNewName("");
+      window.location.assign(withBasePath("/dashboard"));
+      return;
     }
     setSwitching(null);
   }
