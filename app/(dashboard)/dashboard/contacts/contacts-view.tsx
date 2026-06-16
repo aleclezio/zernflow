@@ -198,7 +198,9 @@ export function ContactsView({
             </p>
           </div>
         ) : (
-          <table className="w-full">
+          <>
+          {/* Desktop table (md+) */}
+          <table className="hidden w-full md:table">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-left">
                 <th className="px-8 py-3 text-xs font-medium uppercase text-muted-foreground">
@@ -319,6 +321,78 @@ export function ContactsView({
               })}
             </tbody>
           </table>
+
+          {/* Mobile card list (below md) */}
+          <div className="divide-y divide-border md:hidden">
+            {filtered.map((contact) => {
+              const contactTags = contact.contact_tags
+                .map((ct) => ct.tags)
+                .filter(Boolean) as Tag[];
+              return (
+                <Link
+                  key={contact.id}
+                  href={`/dashboard/contacts/${contact.id}`}
+                  className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-accent/50"
+                >
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                    {contact.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={contact.avatar_url}
+                        alt={contact.display_name || "Contact"}
+                        className="h-9 w-9 rounded-full object-cover"
+                      />
+                    ) : (
+                      contact.display_name?.[0]?.toUpperCase() ?? "?"
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium">
+                        {contact.display_name ?? "Unknown"}
+                      </span>
+                      {contact.is_subscribed ? (
+                        <CheckCircle className="h-4 w-4 flex-shrink-0 text-green-600" />
+                      ) : (
+                        <XCircle className="h-4 w-4 flex-shrink-0 text-muted-foreground/50" />
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Mail className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{contact.email || "No email"}</span>
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Calendar className="h-3 w-3 flex-shrink-0" />
+                      {formatDate(contact.last_interaction_at)}
+                    </div>
+                    {contactTags.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {contactTags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag.id}
+                            className="inline-flex rounded-full border border-border px-2 py-0.5 text-[10px] font-medium"
+                            style={
+                              tag.color
+                                ? { backgroundColor: `${tag.color}20`, borderColor: `${tag.color}40`, color: tag.color }
+                                : undefined
+                            }
+                          >
+                            {tag.name}
+                          </span>
+                        ))}
+                        {contactTags.length > 3 && (
+                          <span className="text-[10px] text-muted-foreground">
+                            +{contactTags.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+          </>
         )}
       </div>
     </div>

@@ -323,7 +323,7 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <div className="flex items-center justify-between border-b border-border bg-card px-4 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card px-4 py-2">
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.push("/dashboard/flows")}
@@ -468,8 +468,8 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
         </div>
       </div>
 
-      {/* Canvas area */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Canvas area (desktop — drag-and-drop, not usable on touch) */}
+      <div className="hidden flex-1 overflow-hidden md:flex">
         <NodePalette />
         <div ref={reactFlowWrapper} className="flex-1">
           <ReactFlow
@@ -527,6 +527,28 @@ function FlowCanvasInner({ flow }: FlowCanvasProps) {
             }}
           />
         )}
+      </div>
+
+      {/* Mobile: the drag-and-drop canvas can't work on touch — show a summary. */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center md:hidden">
+        <h2 className="text-lg font-semibold">Best edited on a computer</h2>
+        <p className="max-w-xs text-sm text-muted-foreground">
+          The flow builder is a drag-and-drop canvas, which doesn&apos;t work on a
+          phone. Open this flow on a desktop to edit it.
+        </p>
+        <div className="mt-2 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <div className="font-medium">{flowName || "Untitled flow"}</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {flow.status} · {nodes.length} node{nodes.length === 1 ? "" : "s"}
+          </div>
+        </div>
+        <button
+          onClick={() => router.push("/dashboard/flows")}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to flows
+        </button>
       </div>
     </div>
   );

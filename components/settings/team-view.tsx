@@ -194,7 +194,7 @@ export function TeamView({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0 ml-4">
+                  <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:ml-4">
                     <span
                       className={cn(
                         "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
@@ -205,7 +205,7 @@ export function TeamView({
                       {member.role}
                     </span>
 
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                    <span className="hidden text-[10px] text-muted-foreground whitespace-nowrap sm:inline">
                       Joined{" "}
                       {new Date(member.joinedAt).toLocaleDateString([], {
                         month: "short",
@@ -250,7 +250,7 @@ export function TeamView({
                   Send an invitation link. The invite expires in 7 days.
                 </p>
 
-                <form onSubmit={handleInvite} className="mt-4 flex gap-2">
+                <form onSubmit={handleInvite} className="mt-4 flex flex-col gap-2 sm:flex-row">
                   <input
                     type="email"
                     value={inviteEmail}

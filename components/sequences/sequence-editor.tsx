@@ -137,8 +137,8 @@ export function SequenceEditor({ sequence }: SequenceEditorProps) {
   return (
     <div className="flex-1 overflow-auto">
       {/* Header */}
-      <div className="border-b border-border px-8 py-6">
-        <div className="flex items-center gap-4">
+      <div className="border-b border-border px-4 py-6 sm:px-8">
+        <div className="flex items-center gap-3 sm:gap-4">
           <button
             onClick={() => router.push("/dashboard/sequences")}
             className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -164,7 +164,8 @@ export function SequenceEditor({ sequence }: SequenceEditorProps) {
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          {/* Desktop actions */}
+          <div className="hidden items-center gap-2 sm:flex">
             <button
               onClick={toggleStatus}
               className={cn(
@@ -192,24 +193,56 @@ export function SequenceEditor({ sequence }: SequenceEditorProps) {
             >
               <Trash2 className="h-4 w-4" />
             </button>
-            <ConfirmDialog
-              open={confirmDelete}
-              title="Delete sequence"
-              message="Are you sure you want to delete this sequence? This action cannot be undone."
-              confirmLabel="Delete"
-              destructive
-              onConfirm={() => {
-                setConfirmDelete(false);
-                handleDelete();
-              }}
-              onCancel={() => setConfirmDelete(false)}
-            />
           </div>
         </div>
       </div>
 
+      {/* Mobile sticky action bar */}
+      <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-border bg-background p-3 sm:hidden">
+        <button
+          onClick={toggleStatus}
+          className={cn(
+            "flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors",
+            status === "active"
+              ? "border border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400"
+              : "border border-emerald-300 text-emerald-700 dark:border-emerald-700 dark:text-emerald-400"
+          )}
+        >
+          {status === "active" ? "Pause" : "Activate"}
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving || !name.trim()}
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button
+          onClick={() => setConfirmDelete(true)}
+          disabled={deleting}
+          className="rounded-lg p-2.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+          title="Delete sequence"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete sequence"
+        message="Are you sure you want to delete this sequence? This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          setConfirmDelete(false);
+          handleDelete();
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
+
       {/* Content */}
-      <div className="px-8 py-6">
+      <div className="px-4 py-6 pb-24 sm:px-8 sm:py-6">
         <div className="mx-auto max-w-2xl space-y-6">
           {/* Description */}
           <div>

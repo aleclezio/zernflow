@@ -296,8 +296,8 @@ export function GrowthView({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-border px-8 py-6">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-border px-4 py-6 sm:px-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">
               Growth Tools
@@ -306,7 +306,7 @@ export function GrowthView({
               Comment-to-DM automation for lead capture and engagement
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/dashboard/growth/ref-links"
               className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent"

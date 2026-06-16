@@ -68,7 +68,7 @@ export default async function ContactDetailPage({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-border px-8 py-6">
+      <div className="border-b border-border px-4 py-6 sm:px-8">
         <Link
           href="/dashboard/contacts"
           className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -89,11 +89,11 @@ export default async function ContactDetailPage({
               contact.display_name?.[0]?.toUpperCase() ?? "?"
             )}
           </div>
-          <div>
-            <h1 className="text-xl font-bold">
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-bold">
               {contact.display_name ?? "Unknown"}
             </h1>
-            <div className="mt-0.5 flex items-center gap-3 text-sm text-muted-foreground">
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               {contact.email && (
                 <span className="flex items-center gap-1">
                   <Mail className="h-3 w-3" />

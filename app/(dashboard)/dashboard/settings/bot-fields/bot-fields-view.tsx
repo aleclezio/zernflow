@@ -108,7 +108,7 @@ export function BotFieldsView({ initialFields }: { initialFields: BotField[] }) 
 
       {showCreate && (
         <div className="mt-4 space-y-3 rounded-lg border border-border bg-card p-4">
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <div className="flex-1">
               <label className="text-xs font-medium text-muted-foreground">Name</label>
               <input

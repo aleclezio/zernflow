@@ -260,7 +260,7 @@ export function ApiKeysView({ initialKeys }: { initialKeys: ApiKey[] }) {
           keys.map((k) => (
             <div
               key={k.id}
-              className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background px-4 py-3"
+              className="flex flex-col gap-3 rounded-lg border border-border bg-background px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{k.name}</p>

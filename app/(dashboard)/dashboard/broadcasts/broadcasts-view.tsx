@@ -143,8 +143,8 @@ export function BroadcastsView({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-border px-8 py-6">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-border px-4 py-6 sm:px-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Broadcasts</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -255,7 +255,7 @@ export function BroadcastsView({
                 <button
                   key={broadcast.id}
                   onClick={() => setSelectedId(broadcast.id)}
-                  className="flex w-full items-center gap-6 px-8 py-4 text-left transition-colors hover:bg-accent/50"
+                  className="flex w-full flex-col items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-accent/50 sm:flex-row sm:items-center sm:gap-6 sm:px-8"
                 >
                   {/* Status + Name */}
                   <div className="min-w-0 flex-1">
@@ -292,7 +292,7 @@ export function BroadcastsView({
                   </div>
 
                   {/* Stats */}
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-4 sm:gap-6">
                     <div className="text-center">
                       <p className="text-lg font-semibold">{total}</p>
                       <p className="text-[10px] uppercase text-muted-foreground">
