@@ -294,6 +294,9 @@ async function processEvent(
         late_conversation_id: conv.platformConversationId ?? conv.id,
         status: "open",
         last_message_at: new Date().toISOString(),
+        // Stamp the contact's last inbound time so the send route can tell
+        // whether a later send fell outside the Instagram 24h window.
+        last_inbound_at: new Date().toISOString(),
         last_message_preview: messagePreview,
         unread_count: 1,
       },
