@@ -90,7 +90,7 @@ export function ConversationNotes({ conversationId }: { conversationId: string }
                   onClick={() => removeNote(n.id)}
                   disabled={deletingId === n.id}
                   aria-label="Delete note"
-                  className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                  className="-m-1 rounded p-1 text-muted-foreground opacity-100 transition-opacity hover:text-destructive md:opacity-0 md:group-hover:opacity-100"
                 >
                   {deletingId === n.id ? (
                     <Loader2 className="h-3 w-3 animate-spin" />

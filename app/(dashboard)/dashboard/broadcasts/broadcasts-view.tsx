@@ -460,7 +460,7 @@ function BroadcastDetail({
         <div className="mx-auto max-w-2xl space-y-6">
           {/* Stats row for non-draft broadcasts */}
           {broadcast.total_recipients > 0 && (
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="rounded-lg border border-border bg-card p-4 text-center">
                 <p className="text-2xl font-bold">{broadcast.total_recipients}</p>
                 <p className="text-xs text-muted-foreground">Recipients</p>
