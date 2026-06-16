@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { setZernioKey, setAiKey } from "@/lib/workspace-keys";
 import { isValidAutoAssignMode } from "@/lib/auto-assign";
-import { WORKSPACE_COOKIE } from "@/lib/workspace";
+import { WORKSPACE_COOKIE, PROFILE_COOKIE } from "@/lib/workspace";
 
 /**
  * Update workspace settings. API keys are owner-only and stored encrypted
@@ -83,10 +83,11 @@ export async function switchWorkspace(workspaceId: string) {
 
   if (!user) return { error: "Not authenticated" };
 
-  // Validate user has access to this workspace
+  // Validate access + pull the workspace's Zernio profile binding (to keep the
+  // shared active_profile_id cookie in sync).
   const { data: membership } = await supabase
     .from("workspace_members")
-    .select("workspace_id")
+    .select("workspace_id, workspaces(zernio_profile_id)")
     .eq("user_id", user.id)
     .eq("workspace_id", workspaceId)
     .single();
@@ -101,6 +102,22 @@ export async function switchWorkspace(workspaceId: string) {
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
   });
+
+  // Keep active_profile_id (the cookie the command-centre client switcher writes
+  // and resolveWorkspaceId prioritises) consistent, so the unified shell never
+  // disagrees about which account is active. Bound profile -> set it; unbound ->
+  // clear so resolution falls back to the workspace cookie just set.
+  const profileId =
+    (membership.workspaces as { zernio_profile_id: string | null } | null)?.zernio_profile_id ?? null;
+  if (profileId) {
+    cookieStore.set(PROFILE_COOKIE, profileId, {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  } else {
+    cookieStore.set(PROFILE_COOKIE, "", { path: "/", maxAge: 0 });
+  }
 
   return { ok: true };
 }
@@ -147,6 +164,10 @@ export async function createWorkspace(name: string) {
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
   });
+  // A new workspace has no Zernio profile yet — clear the shared profile cookie
+  // so resolution uses the workspace cookie (else a stale active_profile_id from
+  // another workspace would win and hide the new one).
+  cookieStore.set(PROFILE_COOKIE, "", { path: "/", maxAge: 0 });
 
   return { ok: true, workspaceId: workspace.id };
 }
