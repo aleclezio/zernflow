@@ -51,15 +51,15 @@ export default async function FlowsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border px-8 py-6">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-border px-4 py-6 sm:px-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Flows</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Build automated chatbot flows for your channels
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               href="/dashboard/flows/templates"
               className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
@@ -73,7 +73,7 @@ export default async function FlowsPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto px-8 py-6">
+      <div className="flex-1 overflow-auto px-4 py-6 sm:px-8">
       {(channelCount ?? 0) === 0 && (
         <div className="mt-6 flex items-center gap-4 rounded-xl border border-dashed border-border bg-card p-5">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">

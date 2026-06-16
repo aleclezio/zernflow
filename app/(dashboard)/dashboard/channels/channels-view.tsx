@@ -176,15 +176,15 @@ export function ChannelsView({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-border px-8 py-6">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-border px-4 py-6 sm:px-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Channels</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Your connected social media accounts from Zernio
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {syncMessage && (
               <span className="text-xs text-muted-foreground">
                 {syncMessage}
@@ -209,7 +209,7 @@ export function ChannelsView({
                 Connect Channel
               </button>
               {showPlatformPicker && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-xl border border-border bg-card p-2 shadow-lg">
+                <div className="absolute right-0 top-full z-50 mt-2 w-56 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card p-2 shadow-lg">
                   {connectablePlatforms.map((p) => (
                     <button
                       key={p.id}

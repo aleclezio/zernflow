@@ -314,8 +314,8 @@ export function TemplatesView({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-border px-8 py-6">
-        <div className="flex items-center justify-between">
+      <div className="border-b border-border px-4 py-6 sm:px-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
               <Link
@@ -333,7 +333,7 @@ export function TemplatesView({ workspaceId }: { workspaceId: string }) {
           </div>
           <button
             disabled
-            className="inline-flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-2 text-sm font-medium text-muted-foreground cursor-not-allowed opacity-60"
+            className="hidden sm:inline-flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-2 text-sm font-medium text-muted-foreground cursor-not-allowed opacity-60"
             title="Coming soon"
           >
             <BookmarkPlus className="h-4 w-4" />
