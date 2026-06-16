@@ -620,6 +620,7 @@ export interface Database {
           status: ConversationStatus;
           assigned_to: string | null;
           last_message_at: string | null;
+          last_inbound_at: string | null;
           last_message_preview: string | null;
           unread_count: number;
           is_automation_paused: boolean;
@@ -636,6 +637,7 @@ export interface Database {
           status?: ConversationStatus;
           assigned_to?: string | null;
           last_message_at?: string | null;
+          last_inbound_at?: string | null;
           last_message_preview?: string | null;
           unread_count?: number;
           is_automation_paused?: boolean;
@@ -647,6 +649,7 @@ export interface Database {
           status?: ConversationStatus;
           assigned_to?: string | null;
           last_message_at?: string | null;
+          last_inbound_at?: string | null;
           last_message_preview?: string | null;
           unread_count?: number;
           is_automation_paused?: boolean;
@@ -865,6 +868,40 @@ export interface Database {
           workspace_id?: string | null;
           event_type: string;
           metadata?: Json;
+          created_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      send_attempts: {
+        Row: {
+          id: string;
+          workspace_id: string | null;
+          conversation_id: string | null;
+          late_conversation_id: string | null;
+          account_id: string | null;
+          platform: string | null;
+          outcome: string;
+          http_status: number;
+          zernio_status: number | null;
+          error_message: string | null;
+          ms_since_last_inbound: number | null;
+          text_length: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id?: string | null;
+          conversation_id?: string | null;
+          late_conversation_id?: string | null;
+          account_id?: string | null;
+          platform?: string | null;
+          outcome: string;
+          http_status: number;
+          zernio_status?: number | null;
+          error_message?: string | null;
+          ms_since_last_inbound?: number | null;
+          text_length?: number | null;
           created_at?: string;
         };
         Update: Record<string, never>;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Paperclip, Bot, User, MessageSquare, CheckCircle, Clock, RotateCcw, Loader2 } from "lucide-react";
+import { Send, Paperclip, Bot, User, MessageSquare, CheckCircle, Clock, RotateCcw, Loader2, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { withBasePath } from "@/lib/client-url";
@@ -126,6 +126,7 @@ export function MessageThread({
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -218,6 +219,7 @@ export function MessageThread({
     const text = input.trim();
     setInput("");
     setSending(true);
+    setSendError(null);
 
     // Optimistic update: add a temporary message immediately
     const optimisticId = `optimistic-${Date.now()}`;
@@ -259,6 +261,13 @@ export function MessageThread({
       );
     } catch (err) {
       console.error("Failed to send message:", err);
+      // Surface the server's SAFE reason (already mapped — no raw SDK text) so a
+      // failure reads as "outside the 24h window" instead of a silent "Failed".
+      setSendError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Couldn't send the message. Please try again."
+      );
       // Mark optimistic message as failed
       setMessages((prev) =>
         prev.map((m) =>
@@ -395,6 +404,19 @@ export function MessageThread({
 
       {/* Composer */}
       <div className="border-t border-border p-4">
+        {sendError && (
+          <div className="mx-auto mb-2 flex max-w-2xl items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+            <span className="flex-1">{sendError}</span>
+            <button
+              onClick={() => setSendError(null)}
+              className="text-destructive/60 hover:text-destructive"
+              aria-label="Dismiss error"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <div className="mx-auto flex max-w-2xl items-end gap-2">
           <SavedReplyPicker onInsert={insertSavedReply} />
           <div className="flex-1">
@@ -404,6 +426,7 @@ export function MessageThread({
               onChange={(e) => {
                 setInput(e.target.value);
                 autoResize();
+                if (sendError) setSendError(null);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
