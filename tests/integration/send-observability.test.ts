@@ -28,11 +28,10 @@ import { setZernioKey } from "@/lib/workspace-keys";
 import { _resetRateLimits } from "@/lib/rate-limit";
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
-const KEY = "zf_sendobs0000000000000000000000a";
-const post = (body: unknown) =>
+const post = (raw: string, body: unknown) =>
   new NextRequest("http://localhost/api/v1/messages", {
     method: "POST",
-    headers: { authorization: `Bearer ${KEY}`, "content-type": "application/json" },
+    headers: { authorization: `Bearer ${raw}`, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
 
@@ -46,9 +45,12 @@ function windowError(): Error {
 async function seed(opts: { withLateId?: boolean } = {}) {
   const svc = serviceClient();
   const { workspaceId, userId } = await createTestUser("sendobs");
+  // Unique key per call — a shared hash across workspaces makes authorizeApiV1
+  // resolve to the wrong workspace (the conversation then 404s).
+  const raw = `zf_${randomUUID().replace(/-/g, "")}`;
   await svc.from("api_keys").insert({
     workspace_id: workspaceId, name: "sendobs key",
-    key_hash: sha256(KEY), key_prefix: KEY.slice(0, 12) + "...",
+    key_hash: sha256(raw), key_prefix: raw.slice(0, 12) + "...",
     created_by: userId, scopes: ["send"],
   });
   await setZernioKey(svc, workspaceId, "fake-zernio-key");
@@ -66,7 +68,7 @@ async function seed(opts: { withLateId?: boolean } = {}) {
       last_inbound_at: oneHourAgo,
     })
     .select("id").single();
-  return { workspaceId, conversationId: conv!.id };
+  return { workspaceId, conversationId: conv!.id, raw };
 }
 
 async function attemptsFor(workspaceId: string) {
@@ -82,8 +84,8 @@ describe("send observability", () => {
   });
 
   it("records a SUCCESS attempt with the window-age field", async () => {
-    const { workspaceId, conversationId } = await seed();
-    const res = await messagesPOST(post({ conversationId, text: "hi there" }));
+    const { workspaceId, conversationId, raw } = await seed();
+    const res = await messagesPOST(post(raw, { conversationId, text: "hi there" }));
     expect(res.status).toBe(201);
 
     const rows = await attemptsFor(workspaceId);
@@ -95,10 +97,10 @@ describe("send observability", () => {
   });
 
   it("maps the Instagram window 403 to a SAFE message and records the raw error", async () => {
-    const { workspaceId, conversationId } = await seed();
+    const { workspaceId, conversationId, raw } = await seed();
     zstate.throwErr = windowError();
 
-    const res = await messagesPOST(post({ conversationId, text: "late reply" }));
+    const res = await messagesPOST(post(raw, { conversationId, text: "late reply" }));
     expect(res.status).toBe(403);
     const body = await res.json();
     // safe, mapped message — NOT the verbatim SDK text (invariant #1)
@@ -116,8 +118,8 @@ describe("send observability", () => {
   });
 
   it("records the silent guard case (conversation missing a Zernio id) that the old code never logged", async () => {
-    const { workspaceId, conversationId } = await seed({ withLateId: false });
-    const res = await messagesPOST(post({ conversationId, text: "x" }));
+    const { workspaceId, conversationId, raw } = await seed({ withLateId: false });
+    const res = await messagesPOST(post(raw, { conversationId, text: "x" }));
     expect(res.status).toBe(400);
 
     const rows = await attemptsFor(workspaceId);
