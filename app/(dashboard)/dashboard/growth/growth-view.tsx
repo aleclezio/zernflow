@@ -326,7 +326,7 @@ export function GrowthView({
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-4 sm:p-8">
         {/* Stats cards */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
@@ -720,7 +720,7 @@ export function GrowthView({
               Latest processed comments and their outcomes.
             </p>
 
-            <div className="mt-4 overflow-hidden rounded-xl border border-border">
+            <div className="mt-4 overflow-x-auto rounded-xl border border-border">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted">

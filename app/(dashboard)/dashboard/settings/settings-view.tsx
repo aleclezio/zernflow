@@ -180,7 +180,7 @@ export function SettingsView({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-border px-8 py-6">
+      <div className="border-b border-border px-4 py-6 sm:px-8">
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Manage your workspace settings
@@ -189,7 +189,7 @@ export function SettingsView({
 
       {/* Settings form */}
       <div className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-2xl space-y-8 px-8 py-8">
+        <div className="mx-auto max-w-2xl space-y-8 px-4 py-8 sm:px-8">
           {/* Workspace name */}
           <section>
             <div className="flex items-center gap-2">
