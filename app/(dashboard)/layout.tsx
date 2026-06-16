@@ -1,5 +1,5 @@
 import { getWorkspace } from "@/lib/workspace";
-import { Sidebar } from "@/components/sidebar";
+import { DashboardShell } from "@/components/dashboard-shell";
 
 export default async function DashboardLayout({
   children,
@@ -21,9 +21,8 @@ export default async function DashboardLayout({
     .filter((w) => w.id);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar workspace={workspace} user={user} workspaces={workspaces} />
-      <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
-    </div>
+    <DashboardShell workspace={workspace} user={user} workspaces={workspaces}>
+      {children}
+    </DashboardShell>
   );
 }

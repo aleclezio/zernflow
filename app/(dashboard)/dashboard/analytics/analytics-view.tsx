@@ -469,7 +469,7 @@ export function AnalyticsView({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-8">
+      <div className="flex-1 overflow-auto p-4 sm:p-8">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -563,7 +563,7 @@ export function AnalyticsView({
             </div>
 
             {/* Flow performance table */}
-            <div className="rounded-xl border border-border bg-card">
+            <div className="overflow-x-auto rounded-xl border border-border bg-card">
               <div className="border-b border-border px-6 py-4">
                 <h3 className="text-sm font-semibold">Flow Performance</h3>
               </div>

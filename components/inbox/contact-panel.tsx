@@ -117,7 +117,7 @@ export function ContactPanel({
   if (!contactId) return null;
 
   return (
-    <div className="flex h-full w-80 flex-col border-l border-border bg-background">
+    <div className="fixed inset-0 z-40 flex h-full w-full flex-col border-l border-border bg-background md:static md:z-auto md:w-80">
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <h3 className="text-sm font-semibold">Contact Info</h3>
