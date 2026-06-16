@@ -225,7 +225,7 @@ function FilterRuleRow({
         );
       case "custom_field":
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <select
               value={rule.value.split("::")[0] || ""}
               onChange={(e) => {
@@ -392,8 +392,8 @@ function FilterGroupCard({
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground uppercase">
             Match
           </span>

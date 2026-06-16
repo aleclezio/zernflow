@@ -350,7 +350,7 @@ export function MessageThread({
                 disabled={!!statusUpdating}
                 title="Close conversation"
                 aria-label="Close conversation"
-                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
+                className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
               >
                 {statusUpdating === "closed" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />}
               </button>
@@ -361,7 +361,7 @@ export function MessageThread({
                 disabled={!!statusUpdating}
                 title="Snooze conversation"
                 aria-label="Snooze conversation"
-                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
+                className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
               >
                 {statusUpdating === "snoozed" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Clock className="h-3.5 w-3.5" />}
               </button>
@@ -372,7 +372,7 @@ export function MessageThread({
                 disabled={!!statusUpdating}
                 title="Reopen conversation"
                 aria-label="Reopen conversation"
-                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
+                className="rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
               >
                 {statusUpdating === "open" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
               </button>

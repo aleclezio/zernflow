@@ -43,7 +43,7 @@ export function ConfirmDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
       <div className="relative z-10 w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
@@ -51,14 +51,14 @@ export function ConfirmDialog({
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-accent transition-colors"
+            className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-accent transition-colors"
           >
             {cancelLabel}
           </button>
           <button
             ref={confirmRef}
             onClick={onConfirm}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium text-white transition-colors ${
+            className={`rounded-lg px-4 py-2.5 text-sm font-medium text-white transition-colors ${
               destructive
                 ? "bg-red-600 hover:bg-red-700"
                 : "bg-primary hover:opacity-90"

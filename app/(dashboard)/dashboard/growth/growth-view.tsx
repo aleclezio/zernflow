@@ -590,7 +590,7 @@ export function GrowthView({
                         : "border-border/60 opacity-60"
                     )}
                   >
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span
@@ -666,7 +666,7 @@ export function GrowthView({
                       </div>
 
                       {/* Actions */}
-                      <div className="ml-4 flex items-center gap-1">
+                      <div className="flex items-center gap-1 sm:ml-4">
                         <button
                           onClick={() => handleStartEdit(trigger)}
                           className="rounded-lg p-2 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground"
