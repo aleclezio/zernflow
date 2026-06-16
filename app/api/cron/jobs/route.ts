@@ -25,6 +25,13 @@ export async function GET(request: NextRequest) {
     .delete()
     .lt("received_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
 
+  // Send-attempt observability retention: keep 90 days, then drop so the table
+  // stays bounded (rows are tiny; this caps it permanently).
+  await supabase
+    .from("send_attempts")
+    .delete()
+    .lt("created_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString());
+
   // Pick up pending jobs that are due
   const { data: jobs, error } = await supabase
     .from("scheduled_jobs")
