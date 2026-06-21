@@ -21,9 +21,10 @@ import { sha256Hex } from "@/lib/webhook-verify";
 export async function registerWorkspaceWebhook(
   supabase: SupabaseClient<Database>,
   workspaceId: string,
-  apiKey: string
+  apiKey: string,
+  opts?: { appUrl?: string }
 ): Promise<{ ok: boolean; warning?: string }> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = opts?.appUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const token = randomBytes(32).toString("base64url");
   const secret = randomBytes(32).toString("base64url");
   const url = `${appUrl}/api/webhooks/zernio/${token}`;
