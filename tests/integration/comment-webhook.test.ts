@@ -188,6 +188,30 @@ describe("POST /api/webhooks/zernio/[token] — comment.received", () => {
     expect(await contactCount(rig.workspaceId)).toBe(0);
   });
 
+  it("executes only once when the same comment arrives under two DIFFERENT event ids", async () => {
+    // Observed live 2026-08-24: Zernio emitted the same IG comment as two
+    // comment.received events with distinct ids in the same second, so the
+    // event-id dedupe passed both and the flow ran twice (double DM). The
+    // comment-claim insert must let exactly one delivery execute.
+    const rig = await setupRig("dupemit");
+    await createCommentRule(rig, { keywords: [{ value: "info" }] });
+    const base = makeComment(rig.accountId, { text: "info" });
+    const evt1 = JSON.stringify({ ...base, id: "evt-dup-a" });
+    const evt2 = JSON.stringify({ ...base, id: "evt-dup-b" });
+
+    const first = await send(rig.token, evt1, { "x-zernio-signature": sign(evt1, rig.secret) });
+    expect(first.status).toBe(200);
+    expect((await first.json()).matched).toBe(true);
+
+    const second = await send(rig.token, evt2, { "x-zernio-signature": sign(evt2, rig.secret) });
+    expect(second.status).toBe(200);
+    expect((await second.json()).duplicate).toBe(true);
+
+    expect(await contactCount(rig.workspaceId)).toBe(1);
+    const logs = await commentLogs(rig.workspaceId);
+    expect(logs).toHaveLength(1);
+  });
+
   it("deduplicates a replayed comment event", async () => {
     const rig = await setupRig("dedupe");
     await createCommentRule(rig, { keywords: [{ value: "info" }] });
