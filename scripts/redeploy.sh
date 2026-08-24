@@ -1,14 +1,18 @@
 #!/bin/bash
-# Recreate the zernflow prod container from the freshly built zernflow:prod
-# image, preserving the running container's environment, network and port
-# binding. Secrets never touch stdout: the env is copied into a root-only
-# temp file on this host and deleted after the new container starts.
+# ⚠ DO NOT USE ON THE CURRENT PROD HOST. The prod container is supervised by
+# systemd (zernflow.service, Restart=always): any container this script starts
+# is killed and replaced with systemd's own zernflow:prod within seconds
+# (observed live 2026-08-24 - the docker-events log shows the fight).
+# On that host: build with scripts/build-prod.sh, deploy with
+# `systemctl restart zernflow`, roll back by retagging zernflow:prod to the
+# rollback image and restarting the unit.
 #
-# Usage (on the prod host, after `docker build -t zernflow:prod .`):
-#   bash scripts/redeploy.sh
+# Kept for hosts WITHOUT a supervisor. It recreates the container from the
+# given image, preserving the running container's environment, network and
+# port binding. Secrets never touch stdout: the env is copied into a
+# root-only temp file on this host and deleted after the new container starts.
 #
-# Rollback (tag taken by the operator before the build):
-#   docker rm -f zernflow && bash scripts/redeploy.sh zernflow:rollback-<tag>
+# Usage:  bash scripts/redeploy.sh [image=zernflow:prod]
 set -euo pipefail
 umask 077
 
