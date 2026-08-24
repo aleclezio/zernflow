@@ -465,6 +465,25 @@ async function processCommentEvent(
     return NextResponse.json({ ok: true, matched: false });
   }
 
+  // Execution idempotency (observed live 2026-08-24): Zernio can emit the SAME
+  // comment as multiple comment.received events with DIFFERENT event ids in the
+  // same second, so the webhook_events event-id dedupe cannot catch it and the
+  // flow executed twice (double DM + double public reply). Claim the comment
+  // itself before executing: comment_logs (channel_id, platform_comment_id) is
+  // unique, so exactly one delivery inserts the claim row and runs the flow;
+  // every other delivery hits the unique violation and stops here. Non-conflict
+  // insert errors fall through to execution so an infra hiccup never drops a
+  // real lead (the closing upsert still records the outcome).
+  const { error: claimError } = await supabase
+    .from("comment_logs")
+    .insert({ ...logBase, matched_trigger_id: matched.id, dm_sent: false, reply_sent: false });
+  if (claimError) {
+    if (claimError.code === "23505") {
+      return NextResponse.json({ ok: true, matched: true, duplicate: true });
+    }
+    console.error("comment claim insert failed (continuing):", claimError.message);
+  }
+
   // Upsert the commenter as a contact, scoped to this channel.
   const senderId = comment.author?.id || `comment_${comment.id}`;
   const senderName = comment.author?.name || comment.author?.username || senderId;
