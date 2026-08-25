@@ -34,6 +34,12 @@ function testKeyReq(body: unknown): NextRequest {
   });
 }
 
+function syncReq(): NextRequest {
+  return new NextRequest("http://localhost:3000/api/v1/channels/sync", {
+    method: "POST",
+  });
+}
+
 function connectReq(body: unknown): NextRequest {
   return new NextRequest("http://localhost:3000/api/v1/channels/connect", {
     method: "POST",
@@ -114,7 +120,7 @@ describe("fail-closed routes when profile is unbound (412 PROFILE_UNBOUND)", () 
       .update({ late_api_key_encrypted: encryptedKeyFor(owner.workspaceId) })
       .eq("id", owner.workspaceId);
 
-    const res = await syncPOST();
+    const res = await syncPOST(syncReq());
 
     expect(res.status).toBe(412);
     const body = await res.json();
@@ -303,7 +309,7 @@ describe("scoped sync", () => {
       },
     });
 
-    const res = await syncPOST();
+    const res = await syncPOST(syncReq());
     expect(res.status).toBe(200);
 
     expect(listAccounts).toHaveBeenCalledWith(

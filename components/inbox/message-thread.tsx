@@ -128,6 +128,7 @@ export function MessageThread({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
+  const [resumingBot, setResumingBot] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -148,6 +149,25 @@ export function MessageThread({
       setStatusUpdating(null);
     }
   }, [conversation, statusUpdating, router]);
+
+  // Defect 6: humanTakeover sets is_automation_paused and nothing ever cleared
+  // it, so a taken-over conversation was automation-dead forever.
+  const resumeAutomation = useCallback(async () => {
+    if (!conversation || resumingBot) return;
+    setResumingBot(true);
+    try {
+      const { error } = await createClient()
+        .from("conversations")
+        .update({ is_automation_paused: false })
+        .eq("id", conversation.id);
+      if (error) throw error;
+      router.refresh();
+    } catch {
+      alert(`Failed to resume automation`);
+    } finally {
+      setResumingBot(false);
+    }
+  }, [conversation, resumingBot, router]);
 
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
@@ -339,9 +359,16 @@ export function MessageThread({
             {conversation.status}
           </span>
           {conversation.is_automation_paused && (
-            <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700">
-              Bot paused
-            </span>
+            <button
+              onClick={resumeAutomation}
+              disabled={resumingBot}
+              title="Resume automation for this conversation"
+              aria-label="Resume automation"
+              className="flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-200 transition-colors disabled:opacity-50"
+            >
+              {resumingBot ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <RotateCcw className="h-2.5 w-2.5" />}
+              Bot paused - resume
+            </button>
           )}
           <div className="flex items-center gap-1">
             {conversation.status !== "closed" && (

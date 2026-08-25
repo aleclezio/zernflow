@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { authorizeApiV1 } from "@/lib/api-auth";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
 import {
@@ -7,23 +7,6 @@ import {
   ProfileUnboundError,
   profileUnboundResponse,
 } from "@/lib/zernio-scope";
-
-async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id, workspaces(*)")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership?.workspaces) return null;
-  return membership.workspaces;
-}
 
 /**
  * POST /api/v1/channels/connect
@@ -33,12 +16,11 @@ async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) 
  * and redirects back to our callback URL when done.
  */
 export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const workspace = await getWorkspace(supabase);
-  if (!workspace)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await authorizeApiV1(request, "write");
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const apiKey = await getZernioKey(supabase, workspace.id);
+  const apiKey = await getZernioKey(supabase, auth.workspaceId);
   if (!apiKey) {
     return NextResponse.json(
       { error: "Zernio API key not configured. Go to Settings first." },
@@ -62,7 +44,7 @@ export async function POST(request: NextRequest) {
   // "first profile of the key" fallback.
   let profileId: string;
   try {
-    profileId = await getBoundProfileId(supabase, workspace.id);
+    profileId = await getBoundProfileId(supabase, auth.workspaceId);
   } catch (err) {
     if (err instanceof ProfileUnboundError) return profileUnboundResponse();
     throw err;
