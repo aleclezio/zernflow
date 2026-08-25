@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { NextRequest, NextResponse } from "next/server";
+import { createServiceClient } from "@/lib/supabase/server";
+import { authorizeApiV1 } from "@/lib/api-auth";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
 import {
@@ -9,23 +10,6 @@ import {
   accountProfileId,
 } from "@/lib/zernio-scope";
 
-async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id, workspaces(*)")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership?.workspaces) return null;
-  return membership.workspaces;
-}
-
 /**
  * POST /api/v1/channels/sync
  *
@@ -33,13 +17,12 @@ async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) 
  * Creates new channels for accounts not yet in the DB.
  * Deactivates channels whose Zernio accounts no longer exist.
  */
-export async function POST() {
-  const supabase = await createClient();
-  const workspace = await getWorkspace(supabase);
-  if (!workspace)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(request: NextRequest) {
+  const gate = await authorizeApiV1(request, "write");
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
-  const apiKey = await getZernioKey(supabase, workspace.id);
+  const apiKey = await getZernioKey(supabase, auth.workspaceId);
   if (!apiKey) {
     return NextResponse.json(
       { error: "Zernio API key not configured. Go to Settings first." },
@@ -49,7 +32,7 @@ export async function POST() {
 
   let profileId: string;
   try {
-    profileId = await getBoundProfileId(supabase, workspace.id);
+    profileId = await getBoundProfileId(supabase, auth.workspaceId);
   } catch (err) {
     if (err instanceof ProfileUnboundError) return profileUnboundResponse();
     throw err;
@@ -73,7 +56,7 @@ export async function POST() {
     const lateAccounts = returned.filter((a) => accountProfileId(a) === profileId);
     if (lateAccounts.length !== returned.length) {
       console.error(
-        `[anomaly] channels/sync: Zernio returned ${returned.length - lateAccounts.length} account(s) outside bound profile despite profileId filter (workspace ${workspace.id})`
+        `[anomaly] channels/sync: Zernio returned ${returned.length - lateAccounts.length} account(s) outside bound profile despite profileId filter (workspace ${auth.workspaceId})`
       );
     }
 
@@ -81,7 +64,7 @@ export async function POST() {
     const { data: existingChannels } = await supabase
       .from("channels")
       .select("*")
-      .eq("workspace_id", workspace.id);
+      .eq("workspace_id", auth.workspaceId);
 
     const existingByZernioId = new Map(
       (existingChannels ?? []).map((c) => [c.late_account_id, c])
@@ -134,7 +117,7 @@ export async function POST() {
         // Channel INSERT is service-role only (tenant lockdown): these
         // accounts were just verified against the workspace's scoped key.
         await (await createServiceClient()).from("channels").insert({
-          workspace_id: workspace.id,
+          workspace_id: auth.workspaceId,
           platform: account.platform as "facebook" | "instagram" | "twitter" | "telegram" | "bluesky" | "reddit",
           late_account_id: account._id,
           username: account.username || null,
@@ -150,7 +133,7 @@ export async function POST() {
     const { data: channels } = await supabase
       .from("channels")
       .select("*")
-      .eq("workspace_id", workspace.id)
+      .eq("workspace_id", auth.workspaceId)
       .order("created_at", { ascending: false });
 
     return NextResponse.json({

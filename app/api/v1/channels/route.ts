@@ -1,33 +1,15 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { NextRequest, NextResponse } from "next/server";
+import { authorizeApiV1 } from "@/lib/api-auth";
 
-async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id, workspaces(*)")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership?.workspaces) return null;
-  return membership.workspaces;
-}
-
-export async function GET() {
-  const supabase = await createClient();
-  const workspace = await getWorkspace(supabase);
-  if (!workspace)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(request: NextRequest) {
+  const gate = await authorizeApiV1(request, "read");
+  if (!gate.ok) return gate.response;
+  const { auth, supabase } = gate;
 
   const { data: channels, error } = await supabase
     .from("channels")
     .select("*")
-    .eq("workspace_id", workspace.id)
+    .eq("workspace_id", auth.workspaceId)
     .order("created_at", { ascending: false });
 
   if (error)
