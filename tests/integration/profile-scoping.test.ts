@@ -11,6 +11,14 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: async () => serviceClient(),
 }));
 
+let currentCookies: Record<string, string> = {};
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      currentCookies[name] ? { name, value: currentCookies[name] } : undefined,
+  }),
+}));
+
 const listAccounts = vi.fn();
 const listProfiles = vi.fn();
 const getConnectUrl = vi.fn();
@@ -25,6 +33,7 @@ vi.mock("@/lib/zernio-client", () => ({
 import { POST as testKeyPOST } from "@/app/api/v1/channels/test-key/route";
 import { POST as syncPOST } from "@/app/api/v1/channels/sync/route";
 import { POST as connectPOST } from "@/app/api/v1/channels/connect/route";
+import { GET as channelsGET } from "@/app/api/v1/channels/route";
 
 function testKeyReq(body: unknown): NextRequest {
   return new NextRequest("http://localhost:3000/api/v1/channels/test-key", {
@@ -57,6 +66,7 @@ async function bindProfile(workspaceId: string, profileId: string) {
 
 beforeEach(() => {
   currentClient = null;
+  currentCookies = {};
   _resetRateLimits();
   listAccounts.mockReset();
   listProfiles.mockReset();
@@ -317,6 +327,51 @@ describe("scoped sync", () => {
 
     const ids = (channels ?? []).map((c) => c.late_account_id).sort();
     expect(ids).toEqual([`acc-${bound}-ok`, `acc-${bound}-pop`].sort());
+  });
+});
+
+// PLANTED FAILURE CHECK — this branch is dev (UNFIXED routes). This test is
+// expected to FAIL here. It passes on fix/defect3-unpause-secbump. Throwaway.
+describe("workspace switcher scoping (Defect 3)", () => {
+  it("channels GET returns the SELECTED workspace's rows, not the first membership's", async () => {
+    const owner = await createTestUser("ps-switch");
+    currentClient = owner.client;
+    const svc = serviceClient();
+
+    const stamp = `${Date.now()}-${Math.round(performance.now())}`;
+    const { data: second, error: wsErr } = await svc
+      .from("workspaces")
+      .insert({ name: `Second ${stamp}`, slug: `second-${stamp}` })
+      .select("id")
+      .single();
+    expect(wsErr).toBeNull();
+    await svc
+      .from("workspace_members")
+      .insert({ workspace_id: second!.id, user_id: owner.userId, role: "owner" });
+
+    const firstAcc = `acc-first-${stamp}`;
+    const secondAcc = `acc-second-${stamp}`;
+    await svc.from("channels").insert([
+      {
+        workspace_id: owner.workspaceId,
+        platform: "instagram" as const,
+        late_account_id: firstAcc,
+        is_active: true,
+      },
+      {
+        workspace_id: second!.id,
+        platform: "instagram" as const,
+        late_account_id: secondAcc,
+        is_active: true,
+      },
+    ]);
+
+    currentCookies = { zernflow_workspace_id: second!.id };
+
+    const res = await channelsGET();
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Array<{ late_account_id: string }>;
+    expect(rows.map((r) => r.late_account_id)).toEqual([secondAcc]);
   });
 });
 
