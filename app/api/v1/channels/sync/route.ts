@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getSessionWorkspaceId } from "@/lib/api-auth";
 import { createZernioClient } from "@/lib/zernio-client";
 import { getZernioKey } from "@/lib/workspace-keys";
 import {
@@ -8,23 +9,6 @@ import {
   profileUnboundResponse,
   accountProfileId,
 } from "@/lib/zernio-scope";
-
-async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: membership } = await supabase
-    .from("workspace_members")
-    .select("workspace_id, workspaces(*)")
-    .eq("user_id", user.id)
-    .limit(1)
-    .single();
-
-  if (!membership?.workspaces) return null;
-  return membership.workspaces;
-}
 
 /**
  * POST /api/v1/channels/sync
@@ -35,7 +19,10 @@ async function getWorkspace(supabase: Awaited<ReturnType<typeof createClient>>) 
  */
 export async function POST() {
   const supabase = await createClient();
-  const workspace = await getWorkspace(supabase);
+  // The SELECTED workspace (same resolution as the Channels page), never the
+  // first membership: Sync on one client's page must not act on another client.
+  const workspaceId = await getSessionWorkspaceId();
+  const workspace = workspaceId ? { id: workspaceId } : null;
   if (!workspace)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

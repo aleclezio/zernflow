@@ -77,6 +77,17 @@ async function authenticateSession(): Promise<AuthResult | null> {
   };
 }
 
+/**
+ * The workspace the operator SELECTED (active_profile_id -> workspace cookie -> first
+ * membership) for session-only routes. Same resolution as the dashboard pages
+ * (lib/workspace.ts), so a route never acts on a different client than the page shows.
+ * Null when there is no session.
+ */
+export async function getSessionWorkspaceId(): Promise<string | null> {
+  const auth = await authenticateSession();
+  return auth?.workspaceId ?? null;
+}
+
 async function authenticateApiKey(apiKey: string): Promise<AuthResult | null> {
   if (!apiKey.startsWith("zf_")) return null;
 

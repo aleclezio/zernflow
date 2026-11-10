@@ -11,6 +11,12 @@ vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: async () => serviceClient(),
 }));
 
+// The channel routes resolve the selected workspace from cookies; an empty jar keeps
+// these single-workspace tests on the caller's only membership.
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: () => undefined }),
+}));
+
 const listAccounts = vi.fn();
 const listProfiles = vi.fn();
 const getConnectUrl = vi.fn();
